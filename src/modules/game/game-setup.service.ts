@@ -2,6 +2,7 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { CardSuit, CardType } from '../../shared/enums/game.enum';
 import { Card, Player } from '../../shared/interfaces/game.interface';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class GameSetupService {
@@ -65,7 +66,7 @@ export class GameSetupService {
    */
   shuffle(deck: Card[]): void {
     for (let i = deck.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = crypto.randomInt(0, i + 1);
       [deck[i], deck[j]] = [deck[j], deck[i]];
     }
   }
