@@ -59,6 +59,4 @@ describe('SocketAuthMiddleware', () => {
     expect(mockAuthService.generateToken).not.toHaveBeenCalled(); // 재발급하지 않음
     expect(next).toHaveBeenCalledWith(); // 에러 없이 통과
   });
-
-  // TODO: 토큰이 없지만 회원인 경우 임시 id를 부여한다
 });
