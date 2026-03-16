@@ -100,6 +100,7 @@ describe('GameSetupService', () => {
     const createMockPlayer = (id: number): Player => ({
       userId: `user_${id}`,
       nickname: `nickname_${id}`,
+      isGuest: true,
       cardCount: 0,
       hand: [],
       isReady: true,
