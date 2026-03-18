@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { GameGateway } from './modules/socket/game.gateway';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './modules/auth/auth.module';
+import { GameModule } from './modules/socket/game.module';
 
 @Module({
   imports: [
@@ -10,8 +11,9 @@ import { AuthModule } from './modules/auth/auth.module';
       envFilePath: '.env',
     }),
     AuthModule,
+    GameModule
   ],
   controllers: [],
-  providers: [GameGateway],
+  providers: [],
 })
 export class AppModule {}

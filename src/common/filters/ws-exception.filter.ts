@@ -1,5 +1,6 @@
 import { Catch, ArgumentsHost, Logger } from '@nestjs/common';
 import { BaseWsExceptionFilter, WsException } from '@nestjs/websockets';
+import { SocketEvent } from 'src/shared/enums/socket-event.enum';
 
 // WebSocket 전용 예외 필터
 @Catch(WsException)
@@ -18,9 +19,9 @@ export class WsExceptionFilter extends BaseWsExceptionFilter {
 
     // 클라이언트에게 에러 메시지 전송
     client.emit('response', {
-      status: 'error',
+      status: SocketEvent.GAME_ERROR,
       message: '잘못된 형식의 요청입니다.',
-      details: error?.message || 'Validation Error',
+      details: error || 'Validation Error',
     });
   }
 }
