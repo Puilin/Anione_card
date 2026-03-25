@@ -17,6 +17,7 @@ import { SocketAuthMiddleware } from './middlewares/auth.middleware';
 import { WsExceptionFilter } from 'src/common/filters/ws-exception.filter';
 import { AuthService } from '../auth/auth.service';
 import { RoomService } from './room.service';
+import { GameService } from '../game/game.service';
 
 // 기본 ValidationPipe는 HTTP 예외를 던지므로, WebSocket에 맞게 커스텀 설정
 export const SocketValidationConfig = new ValidationPipe({
@@ -40,7 +41,8 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
   constructor(
     private readonly authService: AuthService,
-    private readonly roomService: RoomService
+    private readonly roomService: RoomService,
+    private readonly gameService: GameService,
   ) {}
 
   @SubscribeMessage(SocketEvent.CREATE_ROOM)
@@ -174,5 +176,16 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
 
     client.emit(SocketEvent.IDENTITY, identityData); // 클라이언트에게 유저 정보 전달
+  }
+
+  @SubscribeMessage(SocketEvent.GAME_START)
+  handleGameStart(
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = client.data.user;
+    this.logger.log(`[${SocketEvent.GAME_START}] 유저 ${client.data.user.nickname}(${client.data.user.userId})가 게임 시작 시도`);
+    const updatedRoom = this.gameService.startGame(user.userId);
+
+    this.server.to(updatedRoom.roomId).emit(SocketEvent.GAME_STARTED, updatedRoom);
   }
 }

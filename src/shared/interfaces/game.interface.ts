@@ -27,6 +27,8 @@ export interface GameRoom {
   attackStack: number;  // 누적된 벌칙 카드 수
   currentPower: number; // 마지막 칼 자루 수 (연쇄 공격을 얹기 위한 판정 기준)
   lastCard: Card | null; // 바닥에 놓인 카드
+  drawPile: Card[];     // 뽑기용 덱 (remainingDeck)
+  discardPile: Card[];  // 버린 카드 더미 (lastCard 포함)
   lastActionId: number; // 액션 검증용 counter (멱등성 보장)
   turnOwner: string | null;    // 현재 턴 유저 ID
   isBonusTurn: boolean; // "+" 카드 활성화 여부
