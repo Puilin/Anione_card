@@ -1,9 +1,11 @@
-import { GameRoom, Player } from 'src/shared/interfaces/game.interface';
-import { GameDirection } from 'src/shared/enums/game.enum';
+import { Card, GameRoom, Player } from 'src/shared/interfaces/game.interface';
+import { CardType, GameDirection } from 'src/shared/enums/game.enum';
 import { WsException } from '@nestjs/websockets';
 import { v4 as uuidv4 } from 'uuid';
 import { SocketData } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import { LogType } from 'src/shared/enums/log.enum';
+import { GameLog } from 'src/shared/interfaces/log.interface';
 
 export class RoomService {
   // Key: roomId, Value: GameRoom
@@ -50,6 +52,8 @@ export class RoomService {
       attackStack: 0,
       currentPower: 0,
       lastCard: null,
+      drawPile: [],
+      discardPile: [],
       lastActionId: 0,
       turnOwner: null,
       isBonusTurn: false,
@@ -210,5 +214,25 @@ export class RoomService {
     player.isReady = !player.isReady;
 
     return room;
+  }
+
+  createSystemLog(room: GameRoom, actorId: string, type: LogType, message: string) {
+    const actor = room.players.find(p => p.userId === actorId);
+
+    return {
+      id: uuidv4(),
+      type,
+      actorId,
+      actorName: actor?.nickname ?? 'Unknown',
+      payload: { message },
+      timestamp: Date.now(),
+    };
+  }
+
+  pushLog(room: GameRoom, log: GameLog) {
+    room.recentLogs.push(log);
+    if (room.recentLogs.length > 5) {
+      room.recentLogs.shift();
+    }
   }
 }

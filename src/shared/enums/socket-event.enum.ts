@@ -5,12 +5,14 @@ export enum SocketEvent {
   JOIN_ROOM = 'joinRoom',
   LEAVE_ROOM = 'leaveRoom',
   GAME_READY = 'gameReady',
+  GAME_START = 'gameStart',
   PLAY_CARD = 'playCard',
   DRAW_CARD = 'drawCard',
 
   // Server -> Client (Update/Response)
   IDENTITY = 'identity',
   GAME_STATE_UPDATE = 'gameStateUpdate',
+  GAME_STARTED = 'gameStarted',
   PLAYER_EFFECT = 'playerEffect',
   GAME_ERROR = 'gameError',
   GAME_OVER = 'gameOver',

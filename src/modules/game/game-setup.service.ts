@@ -7,7 +7,7 @@ import * as crypto from 'crypto';
 @Injectable()
 export class GameSetupService {
   private readonly SUITS = Object.values(CardSuit);
-  private readonly SPECIAL_TYPES = ['SHIELD', 'EVADE', 'PLUS_ONE', 'REVERSE', 'JUMP'];
+  private readonly SPECIAL_TYPES = ['SHIELD', 'EVADE', 'BONUS', 'REVERSE', 'JUMP'];
 
   // 카드의 '원형'을 저장할 마스터 데이터 (Flyweight Factory 역할) => id만 제거하고 이후에 매핑
   private readonly masterDeck: Omit<Card, 'id'>[] = [];
@@ -46,7 +46,7 @@ export class GameSetupService {
       type,
       value,
       power,
-      assetKey: `${suit}_${type}_${value}`.toUpperCase(),
+      assetKey: `${suit}_${type}_${value}`,
     };
   }
 
