@@ -130,4 +130,8 @@ export class GameService {
     room.lastCard = card;
   }
 
+  getGameState(userId: string): GameRoom {
+    const room = this.getValidRoom(userId);
+    return room;
+  }
 }  

@@ -4,6 +4,8 @@ import { GameGateway } from "./game.gateway";
 import { RoomService } from "./room.service";
 import { GameSetupService } from "../game/game-setup.service";
 import { GameService } from "../game/game.service";
+import { MaskingService } from "./masking.service";
+import { GameResponseInterceptor } from "./interceptors/game-response.interceptor";
 
 @Module({
   imports: [AuthModule],
@@ -11,8 +13,10 @@ import { GameService } from "../game/game.service";
     GameGateway,
     RoomService,
     GameService,
-    GameSetupService
+    GameSetupService,
+    MaskingService,
+    GameResponseInterceptor
   ],
-  exports: [],
+  exports: [MaskingService],
 })
 export class GameModule {}

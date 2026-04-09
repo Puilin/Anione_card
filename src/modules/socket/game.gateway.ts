@@ -9,7 +9,7 @@ import {
   MessageBody,
   WsException,
 } from '@nestjs/websockets';
-import { Logger, UseFilters, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Logger, UseFilters, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { Server, Socket, SocketData } from 'socket.io';
 import { JoinRoomDto, LeaveRoomDto, PlayCardDto } from './dto/game-room.dto';
 import { SocketEvent } from 'src/shared/enums/socket-event.enum';
@@ -18,6 +18,7 @@ import { WsExceptionFilter } from 'src/common/filters/ws-exception.filter';
 import { AuthService } from '../auth/auth.service';
 import { RoomService } from './room.service';
 import { GameService } from '../game/game.service';
+import { GameResponseInterceptor } from './interceptors/game-response.interceptor';
 
 // 기본 ValidationPipe는 HTTP 예외를 던지므로, WebSocket에 맞게 커스텀 설정
 export const SocketValidationConfig = new ValidationPipe({
@@ -36,7 +37,7 @@ export const SocketValidationConfig = new ValidationPipe({
   cors: { origin: '*' }, // 개발 편의를 위한 CORS 허용
 })
 export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
-  @WebSocketServer() server: Server;
+  @WebSocketServer() server!: Server;
   private logger: Logger = new Logger('GameGateway');
 
   constructor(
@@ -178,6 +179,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     client.emit(SocketEvent.IDENTITY, identityData); // 클라이언트에게 유저 정보 전달
   }
 
+  @UseInterceptors(GameResponseInterceptor)
   @SubscribeMessage(SocketEvent.GAME_START)
   handleGameStart(
     @ConnectedSocket() client: Socket,
@@ -186,6 +188,21 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     this.logger.log(`[${SocketEvent.GAME_START}] 유저 ${client.data.user.nickname}(${client.data.user.userId})가 게임 시작 시도`);
     const updatedRoom = this.gameService.startGame(user.userId);
 
-    this.server.to(updatedRoom.roomId).emit(SocketEvent.GAME_STARTED, updatedRoom);
+    this.server.to(updatedRoom.roomId).emit(SocketEvent.GAME_STARTED);
+    return updatedRoom; // 인터셉터에서 마스킹 후 클라이언트에게 전달
+  }
+
+  @UseInterceptors(GameResponseInterceptor)
+  @SubscribeMessage(SocketEvent.GET_GAME_STATE)
+  handleGetGameState(
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = client.data.user;
+
+    this.logger.log(
+      `[${SocketEvent.GET_GAME_STATE}] 유저 ${user.nickname}(${user.userId})가 게임 상태 요청`,
+    );
+
+    return this.gameService.getGameState(user.userId);
   }
 }
