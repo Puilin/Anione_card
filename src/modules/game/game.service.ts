@@ -41,6 +41,14 @@ export class GameService {
     const room = this.roomService.getRoom(roomId);
     if (!room) throw new WsException('Room not found');
 
+    const isParticipant = room.players.some(
+      (player) => player.userId === userId,
+    );
+
+    if (!isParticipant) {
+      throw new WsException('User is not a participant of this room');
+    }
+
     return room;
   }
 
@@ -130,4 +138,8 @@ export class GameService {
     room.lastCard = card;
   }
 
+  getGameState(userId: string): GameRoom {
+    const room = this.getValidRoom(userId);
+    return room;
+  }
 }  

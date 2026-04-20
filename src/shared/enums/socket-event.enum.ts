@@ -1,6 +1,7 @@
 export enum SocketEvent {
   // Client -> Server (Action)
   CLIENT_READY = 'clientReady',
+  GET_GAME_STATE = 'getGameState',
   CREATE_ROOM = 'createRoom',
   JOIN_ROOM = 'joinRoom',
   LEAVE_ROOM = 'leaveRoom',

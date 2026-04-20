@@ -38,7 +38,9 @@ export class RoomService {
     const roomId = uuidv4();
 
     const hostPlayer: Player = {
-      ...user,
+      userId: user.userId,
+      nickname: user.nickname,
+      isGuest: user.isGuest,
       hand: [],
       cardCount: 0,
       isReady: true, // 방장은 기본 준비 상태
@@ -86,11 +88,13 @@ export class RoomService {
     const role: Player['role'] = isPlaying ? 'SPECTATOR' : 'PLAYER';
 
     const newPlayer: Player = {
-      ...user,
-      isOut: false,
+      userId: user.userId,
+      nickname: user.nickname,
+      isGuest: user.isGuest,
       hand: [],
       cardCount: 0,
       isReady: false,
+      isOut: false,
       role,
     };
 

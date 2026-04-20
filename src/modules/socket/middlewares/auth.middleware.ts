@@ -61,9 +61,11 @@ export const SocketAuthMiddleware = (authService: AuthService): SocketMiddleware
 
       next();
     } catch (error) {
-      const authError = new Error('Authentication Failed');
-      (authError as any).data = { code: 'AUTH_ERROR', message: error.message };
-      next(authError);
+      if (error instanceof Error) {
+        const authError = new Error('Authentication Failed');
+        (authError as any).data = { code: 'AUTH_ERROR', message: error.message };
+        next(authError);
+      }
     }
   };
 };
