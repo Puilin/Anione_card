@@ -76,7 +76,6 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
     // 방에 있는 모든 사람(나 포함)에게 새로운 유저가 왔음을 알립니다.
     this.server.to(room.roomId).emit(SocketEvent.ROOM_UPDATED, {
-      room,
       message: `${client.data.user.nickname}님이 입장하셨습니다.`,
     });
   }
@@ -95,7 +94,6 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
     this.logger.log(`[${SocketEvent.LEAVE_ROOM}] 유저 ${client.data.user.nickname}(${client.data.user.userId})가 방(${data.roomId}) 퇴장 시도`);
     client.to(roomId).emit(SocketEvent.ROOM_UPDATED, {
-      room: isDeleted ? null : room, // 방이 삭제된 경우 null로 보냄
       message: `${client.data.user.nickname}님이 퇴장하셨습니다. ${isDeleted ? '방이 삭제되었습니다.' : ''}`,
     });
 
