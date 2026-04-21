@@ -1,4 +1,5 @@
 import 'socket.io';
+import { GameRoom } from './game.interface';
 declare module 'socket.io' {
   export interface SocketData {
     user: {
@@ -7,5 +8,6 @@ declare module 'socket.io' {
       isGuest: boolean;
       accessToken?: string;
     };
+    room: GameRoom;
   }
 }
