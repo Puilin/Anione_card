@@ -8,7 +8,6 @@ export class RoomIdDto {
 }
 
 export class JoinRoomDto extends RoomIdDto {}
-export class LeaveRoomDto extends RoomIdDto {}
 
 export class PlayCardDto extends RoomIdDto {
   @IsUUID('4', { message: '카드 ID는 유효한 UUID v4 형식이어야 합니다.' })

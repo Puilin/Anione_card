@@ -9,9 +9,9 @@ import {
   MessageBody,
   WsException,
 } from '@nestjs/websockets';
-import { Logger, UseFilters, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Logger, UseFilters, UseGuards, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { Server, Socket, SocketData } from 'socket.io';
-import { JoinRoomDto, LeaveRoomDto, PlayCardDto } from './dto/game-room.dto';
+import { JoinRoomDto, PlayCardDto } from './dto/game-room.dto';
 import { SocketEvent } from 'src/shared/enums/socket-event.enum';
 import { SocketAuthMiddleware } from './middlewares/auth.middleware';
 import { WsExceptionFilter } from 'src/common/filters/ws-exception.filter';
@@ -19,6 +19,10 @@ import { AuthService } from '../auth/auth.service';
 import { RoomService } from './room.service';
 import { GameService } from '../game/game.service';
 import { GameResponseInterceptor } from './interceptors/game-response.interceptor';
+import { GameParticipantGuard } from 'src/common/guards/game-participant.guard';
+import { TurnOwnerGuard } from 'src/common/guards/turnowner.guard';
+import { RoomMasterGuard } from 'src/common/guards/room-master.guard';
+import { MemberOnlyGuard } from 'src/common/guards/member-only.guard';
 
 // 기본 ValidationPipe는 HTTP 예외를 던지므로, WebSocket에 맞게 커스텀 설정
 export const SocketValidationConfig = new ValidationPipe({
@@ -46,6 +50,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     private readonly gameService: GameService,
   ) {}
 
+  @UseGuards(MemberOnlyGuard)
   @SubscribeMessage(SocketEvent.CREATE_ROOM)
   handleCreateRoom(
     @ConnectedSocket() client: Socket,
@@ -81,10 +86,10 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   }
 
   // 방 퇴장 (leaveRoom)
+  @UseGuards(GameParticipantGuard)
   @SubscribeMessage(SocketEvent.LEAVE_ROOM)
   handleLeaveRoom(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: LeaveRoomDto,
   ) {
     const { room, roomId, isDeleted } = this.roomService.leaveRoom(client.data.user.userId);
 
@@ -92,15 +97,18 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       return;
     }
 
-    this.logger.log(`[${SocketEvent.LEAVE_ROOM}] 유저 ${client.data.user.nickname}(${client.data.user.userId})가 방(${data.roomId}) 퇴장 시도`);
+    this.logger.log(`[${SocketEvent.LEAVE_ROOM}] 유저 ${client.data.user.nickname}(${client.data.user.userId})가 방(${roomId}) 퇴장 시도`);
     client.to(roomId).emit(SocketEvent.ROOM_UPDATED, {
       message: `${client.data.user.nickname}님이 퇴장하셨습니다. ${isDeleted ? '방이 삭제되었습니다.' : ''}`,
     });
 
     client.leave(roomId);
+
+    delete client.data.room; // 클라이언트의 소켓 데이터에서 방 정보 제거
   }
 
   // 준비 상태 변경
+  @UseGuards(GameParticipantGuard)
   @SubscribeMessage(SocketEvent.GAME_READY)
   handleGameReady(
     @ConnectedSocket() client: Socket,
@@ -117,6 +125,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   }
 
   // 카드 내기 (playCard)
+  @UseGuards(GameParticipantGuard, TurnOwnerGuard)
   @SubscribeMessage(SocketEvent.PLAY_CARD)
   handlePlayCard(
     @ConnectedSocket() client: Socket,
@@ -177,6 +186,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     client.emit(SocketEvent.IDENTITY, identityData); // 클라이언트에게 유저 정보 전달
   }
 
+  @UseGuards(GameParticipantGuard, RoomMasterGuard)
   @UseInterceptors(GameResponseInterceptor)
   @SubscribeMessage(SocketEvent.GAME_START)
   handleGameStart(
@@ -190,6 +200,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     return updatedRoom; // 인터셉터에서 마스킹 후 클라이언트에게 전달
   }
 
+  @UseGuards(GameParticipantGuard)
   @UseInterceptors(GameResponseInterceptor)
   @SubscribeMessage(SocketEvent.GET_GAME_STATE)
   handleGetGameState(
