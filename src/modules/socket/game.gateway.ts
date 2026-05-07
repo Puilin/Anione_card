@@ -103,6 +103,8 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     });
 
     client.leave(roomId);
+
+    delete client.data.room; // 클라이언트의 소켓 데이터에서 방 정보 제거
   }
 
   // 준비 상태 변경
