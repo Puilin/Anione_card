@@ -6,6 +6,15 @@ import { GameSetupService } from "../game/game-setup.service";
 import { GameService } from "../game/game.service";
 import { MaskingService } from "./masking.service";
 import { GameResponseInterceptor } from "./interceptors/game-response.interceptor";
+import { ActionValidatorRegistry } from "../game/validators/action-validator.registry";
+import { ACTION_VALIDATORS } from "../game/validators/action-validator.token";
+import { AttackCardValidator } from "../game/validators/attack-card-action.validator";
+import { NormalCardValidator } from "../game/validators/normal-card-action.validator";
+import { SkipCardValidator } from "../game/validators/skip-card-action.validator";
+import { ReverseCardValidator } from "../game/validators/reverse-card-action.validator";
+import { ShieldCardValidator } from "../game/validators/shield-card-action.validator";
+import { EvadeCardValidator } from "../game/validators/evade-card-action.validator";
+import { BonusCardValidator } from "../game/validators/bonus-card-action.validator";
 
 @Module({
   imports: [AuthModule],
@@ -15,7 +24,44 @@ import { GameResponseInterceptor } from "./interceptors/game-response.intercepto
     GameService,
     GameSetupService,
     MaskingService,
-    GameResponseInterceptor
+    GameResponseInterceptor,
+    ActionValidatorRegistry,
+    AttackCardValidator,
+    NormalCardValidator,
+    SkipCardValidator,
+    ReverseCardValidator,
+    ShieldCardValidator,
+    EvadeCardValidator,
+    BonusCardValidator,
+    {
+      provide: ACTION_VALIDATORS,
+      useFactory: (
+        attack: AttackCardValidator,
+        normal: NormalCardValidator,
+        skip: SkipCardValidator,
+        reverse: ReverseCardValidator,
+        shield: ShieldCardValidator,
+        evade: EvadeCardValidator,
+        bonus: BonusCardValidator,
+      ) => [
+        attack,
+        normal,
+        skip,
+        reverse,
+        shield,
+        evade,
+        bonus,
+      ],
+      inject: [
+        AttackCardValidator,
+        NormalCardValidator,
+        SkipCardValidator,
+        ReverseCardValidator,
+        ShieldCardValidator,
+        EvadeCardValidator,
+        BonusCardValidator,
+      ],
+    },
   ],
   exports: [MaskingService],
 })
