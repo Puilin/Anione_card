@@ -13,7 +13,16 @@ export class EvadeCardValidator extends AbstractSpecialCardValidator {
   protected canPlayWhenNoAttackStack(
     ctx: SpecialCardRuleContext,
   ): boolean {
-    return this.isSameSuit(ctx) || this.isSameValue(ctx);
+    return (
+      this.isSameSuit(
+        ctx.lastCard,
+        ctx.card,
+      ) ||
+      this.isSameValue(
+        ctx.lastCard,
+        ctx.card,
+      )
+    );
   }
 
   protected getInvalidPlayMessage(): string {

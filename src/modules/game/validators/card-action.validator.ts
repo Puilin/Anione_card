@@ -61,4 +61,18 @@ export abstract class CardActionValidator extends BaseActionValidator {
       );
     }
   }
+
+  protected isSameSuit(
+    first: Card,
+    second: Card,
+  ): boolean {
+    return first.suit === second.suit;
+  }
+
+  protected isSameValue(
+    first: Card,
+    second: Card,
+  ): boolean {
+    return first.value === second.value;
+  }
 }
