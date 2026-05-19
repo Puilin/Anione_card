@@ -38,10 +38,10 @@ export class NormalCardValidator extends CardActionValidator {
     }
 
     const isSameSuit =
-      lastCard.suit === card.suit;
+      this.isSameSuit(lastCard, card);
 
     const isSameValue =
-      lastCard.value === card.value;
+      this.isSameValue(lastCard, card);
 
     // 문양 또는 숫자가 같아야 함
     if (!isSameSuit && !isSameValue) {

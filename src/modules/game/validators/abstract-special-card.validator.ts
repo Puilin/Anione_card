@@ -61,18 +61,6 @@ export abstract class AbstractSpecialCardValidator extends CardActionValidator {
     }
   }
 
-  protected isSameSuit(
-    ctx: SpecialCardRuleContext,
-  ): boolean {
-    return ctx.lastCard.suit === ctx.card.suit;
-  }
-
-  protected isSameValue(
-    ctx: SpecialCardRuleContext,
-  ): boolean {
-    return ctx.lastCard.value === ctx.card.value;
-  }
-
   protected abstract canPlayWhenAttackStack(
     ctx: SpecialCardRuleContext,
   ): boolean;

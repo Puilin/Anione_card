@@ -13,7 +13,7 @@ export class BonusCardValidator extends AbstractSpecialCardValidator {
   protected canPlayWhenNoAttackStack(
     ctx: SpecialCardRuleContext,
   ): boolean {
-    return this.isSameSuit(ctx);
+    return this.isSameSuit(ctx.lastCard, ctx.card);
   }
 
   protected getInvalidPlayMessage(): string {
