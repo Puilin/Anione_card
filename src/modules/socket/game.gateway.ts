@@ -126,6 +126,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
   // 카드 내기 (playCard)
   @UseGuards(GameParticipantGuard, TurnOwnerGuard)
+  @UseInterceptors(GameResponseInterceptor)
   @SubscribeMessage(SocketEvent.PLAY_CARD)
   handlePlayCard(
     @ConnectedSocket() client: Socket,
@@ -134,7 +135,21 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     this.logger.log(
       `[${SocketEvent.PLAY_CARD}] 유저 ${client.data.user.nickname}(${client.data.user.userId})가 방(${data.roomId})에 카드(${data.cardId}) 제출 시도`
     );
-    // TODO: GameService.playCard 호출
+    const updatedRoom = this.gameService.playCard(
+      client.data.user.userId,
+      data.cardId,
+    );
+
+    this.server
+      .to(updatedRoom.roomId)
+      .emit(
+        SocketEvent.GAME_STATE_UPDATE,
+        {
+          message: `${client.data.user.nickname}님이 [${updatedRoom.lastCard?.suit} ${updatedRoom.lastCard?.value}] 카드를 냈습니다.`,
+        }
+      );
+
+    return updatedRoom;
   }
 
   // 초기화 확인

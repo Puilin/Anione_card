@@ -5,12 +5,16 @@ import { WsException } from "@nestjs/websockets";
 import { CardType, GameDirection } from "../../shared/enums/game.enum";
 import { LogType } from "src/shared/enums/log.enum";
 import { Injectable } from "@nestjs/common";
+import { ActionValidatorRegistry } from "./validators/action-validator.registry";
+import { GameLog } from "src/shared/interfaces/log.interface";
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class GameService {
   constructor(
     private readonly gameSetupService: GameSetupService,
-    private readonly roomService: RoomService
+    private readonly roomService: RoomService,
+    private readonly actionValidatorRegistry: ActionValidatorRegistry,
   ) { }
 
   startGame(userId: string): GameRoom {
@@ -136,6 +140,192 @@ export class GameService {
   private pushToDiscardPile(room: GameRoom, card: Card) {
     room.discardPile.push(card);
     room.lastCard = card;
+  }
+
+  playCard(
+    userId: string,
+    cardId: string,
+  ): GameRoom {
+    const room = this.getValidRoom(userId);
+    const player = this.getPlayablePlayer(room, userId);
+    const card = this.getCardFromHand(player, cardId);
+
+    const validator =
+      this.actionValidatorRegistry.getValidator(card);
+
+    validator.validate({
+      room,
+      player,
+      card,
+    });
+
+    player.hand = player.hand.filter(
+      (handCard) => handCard.id !== card.id,
+    );
+    player.cardCount = player.hand.length;
+
+    this.pushToDiscardPile(room, card);
+    this.applyCardEffect(room, player, card);
+    this.pushPlayCardLog(room, player, card);
+
+    room.lastActionId += 1;
+
+    return room;
+  }
+
+  private getPlayablePlayer(
+    room: GameRoom,
+    userId: string,
+  ): Player {
+    const player = room.players.find(
+      (candidate) => candidate.userId === userId,
+    );
+
+    if (!player) {
+      throw new WsException(
+        'Player not found in room',
+      );
+    }
+
+    return player;
+  }
+
+  private getCardFromHand(
+    player: Player,
+    cardId: string,
+  ): Card {
+    const card = player.hand.find(
+      (handCard) => handCard.id === cardId,
+    );
+
+    if (!card) {
+      throw new WsException(
+        'Card not found in hand',
+      );
+    }
+
+    return card;
+  }
+
+  private applyCardEffect(
+    room: GameRoom,
+    player: Player,
+    card: Card,
+  ): void {
+    let advanceSteps = 1;
+    let keepTurn = false;
+
+    if (card.type === CardType.ATTACK) {
+      room.attackStack += card.power;
+      room.currentPower = card.power;
+    } else if (card.type === CardType.NUMBER) {
+      room.attackStack = 0;
+      room.currentPower = 0;
+      room.isBonusTurn = false;
+    } else if (card.type === CardType.SPECIAL) {
+      switch (card.value) {
+        case 'SHIELD':
+          room.attackStack = 0;
+          room.currentPower = 0;
+          room.isBonusTurn = false;
+          break;
+        case 'EVADE':
+          // intentinally no-op
+          break;
+        case 'BONUS':
+          keepTurn = true;
+          room.isBonusTurn = true;
+          break;
+        case 'REVERSE':
+          room.direction =
+            room.direction === GameDirection.CLOCKWISE
+              ? GameDirection.COUNTER_CLOCKWISE
+              : GameDirection.CLOCKWISE;
+          room.isBonusTurn = false;
+          break;
+        case 'JUMP':
+          advanceSteps = 2;
+          room.isBonusTurn = false;
+          break;
+        default:
+          room.isBonusTurn = false;
+          break;
+      }
+    } else if (card.type === CardType.WILD) {
+      // TODO (ANI-30)
+      room.isBonusTurn = false;
+    } else {
+      room.isBonusTurn = false;
+    }
+
+    if (keepTurn) {
+      room.turnOwner = player.userId;
+      return;
+    }
+
+    let nextTurnOwner = player.userId;
+    for (let i = 0; i < advanceSteps; i += 1) {
+      nextTurnOwner = this.roomService.getNextTurnOwner(
+        room,
+        nextTurnOwner,
+      );
+    }
+    room.turnOwner = nextTurnOwner;
+  }
+
+  private pushPlayCardLog(
+    room: GameRoom,
+    player: Player,
+    card: Card,
+  ): void {
+    const logType = this.resolvePlayLogType(card);
+
+    const log: GameLog = {
+      id: uuidv4(),
+      type: logType,
+      actorId: player.userId,
+      actorName: player.nickname,
+      cardId: card.id,
+      payload: {
+        suit: card.suit,
+        power: card.power,
+        attackStack: room.attackStack,
+      },
+      timestamp: Date.now(),
+    };
+
+    if (card.type === CardType.ATTACK && room.turnOwner) {
+      log.targetId = room.turnOwner;
+    }
+
+    this.roomService.pushLog(room, log);
+  }
+
+  private resolvePlayLogType(
+    card: Card,
+  ): LogType {
+    if (card.type === CardType.ATTACK) {
+      return LogType.ATTACK;
+    }
+
+    if (card.type === CardType.SPECIAL) {
+      switch (card.value) {
+        case 'SHIELD':
+          return LogType.DEFENSE;
+        case 'EVADE':
+          return LogType.EVADE;
+        case 'BONUS':
+          return LogType.BONUS;
+        case 'REVERSE':
+          return LogType.REVERSE;
+        case 'JUMP':
+          return LogType.SKIP;
+        default:
+          return LogType.NOTICE;
+      }
+    }
+
+    return LogType.NOTICE;
   }
 
   getGameState(userId: string): GameRoom {

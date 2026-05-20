@@ -15,6 +15,7 @@ import { ReverseCardValidator } from "../game/validators/reverse-card-action.val
 import { ShieldCardValidator } from "../game/validators/shield-card-action.validator";
 import { EvadeCardValidator } from "../game/validators/evade-card-action.validator";
 import { BonusCardValidator } from "../game/validators/bonus-card-action.validator";
+import { WildcardActionValidator } from "../game/validators/wildcard-action.validator";
 
 @Module({
   imports: [AuthModule],
@@ -33,6 +34,7 @@ import { BonusCardValidator } from "../game/validators/bonus-card-action.validat
     ShieldCardValidator,
     EvadeCardValidator,
     BonusCardValidator,
+    WildcardActionValidator,
     {
       provide: ACTION_VALIDATORS,
       useFactory: (
@@ -43,6 +45,7 @@ import { BonusCardValidator } from "../game/validators/bonus-card-action.validat
         shield: ShieldCardValidator,
         evade: EvadeCardValidator,
         bonus: BonusCardValidator,
+        wildcard: WildcardActionValidator,
       ) => [
         attack,
         normal,
@@ -51,6 +54,7 @@ import { BonusCardValidator } from "../game/validators/bonus-card-action.validat
         shield,
         evade,
         bonus,
+        wildcard,
       ],
       inject: [
         AttackCardValidator,
@@ -60,6 +64,7 @@ import { BonusCardValidator } from "../game/validators/bonus-card-action.validat
         ShieldCardValidator,
         EvadeCardValidator,
         BonusCardValidator,
+        WildcardActionValidator,
       ],
     },
   ],
