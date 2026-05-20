@@ -1,6 +1,10 @@
 import { WsException } from '@nestjs/websockets';
 
 import {
+  CardSuit,
+} from 'src/shared/enums/game.enum';
+
+import {
   Card,
   GameRoom,
   Player,
@@ -9,6 +13,7 @@ import { BaseActionValidator, ValidateActionParams } from './base-action.validat
 
 export interface ValidateCardActionParams extends ValidateActionParams {
   card: Card;
+  chosenSuit?: CardSuit;
 }
 
 /**
@@ -66,7 +71,7 @@ export abstract class CardActionValidator extends BaseActionValidator {
     first: Card,
     second: Card,
   ): boolean {
-    return first.suit === second.suit;
+    return first.declaredSuit === second.declaredSuit;
   }
 
   protected isSameValue(

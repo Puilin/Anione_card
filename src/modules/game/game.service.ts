@@ -2,7 +2,7 @@ import { Card, GameRoom, Player } from "src/shared/interfaces/game.interface";
 import { GameSetupService } from "./game-setup.service";
 import { RoomService } from "../socket/room.service";
 import { WsException } from "@nestjs/websockets";
-import { CardType, GameDirection } from "../../shared/enums/game.enum";
+import { CardSuit, CardType, GameDirection } from "../../shared/enums/game.enum";
 import { LogType } from "src/shared/enums/log.enum";
 import { Injectable } from "@nestjs/common";
 import { ActionValidatorRegistry } from "./validators/action-validator.registry";
@@ -145,6 +145,7 @@ export class GameService {
   playCard(
     userId: string,
     cardId: string,
+    chosenSuit?: CardSuit,
   ): GameRoom {
     const room = this.getValidRoom(userId);
     const player = this.getPlayablePlayer(room, userId);
@@ -157,7 +158,12 @@ export class GameService {
       room,
       player,
       card,
+      chosenSuit,
     });
+
+    if (card.type === CardType.WILD) {
+      card.declaredSuit = chosenSuit!;
+    }
 
     player.hand = player.hand.filter(
       (handCard) => handCard.id !== card.id,
@@ -252,7 +258,7 @@ export class GameService {
           break;
       }
     } else if (card.type === CardType.WILD) {
-      // TODO (ANI-30)
+      // Wild는 suit 선언만 변경하고 턴/보너스 상태만 일반 진행으로 정리한다.
       room.isBonusTurn = false;
     } else {
       room.isBonusTurn = false;

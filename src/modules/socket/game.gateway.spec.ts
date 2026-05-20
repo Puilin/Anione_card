@@ -47,6 +47,7 @@ describe('GameGateway', () => {
           type: CardType.NUMBER,
           power: 0,
           suit: CardSuit.RABBIT,
+          declaredSuit: CardSuit.RABBIT,
           value: '3',
           assetKey: 'rabbit_3',
         }
@@ -74,6 +75,7 @@ describe('GameGateway', () => {
       expect(gameService.playCard).toHaveBeenCalledWith(
         'user-1',
         'card-1',
+        undefined,
       );
       expect(to).toHaveBeenCalledWith(
         'room-1',

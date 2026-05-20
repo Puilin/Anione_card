@@ -4,6 +4,7 @@ import { GameLog } from './log.interface';
 export interface Card {
   id: string;
   suit: CardSuit;
+  declaredSuit: CardSuit;
   type: CardType;
   value: string;      // "1"~"10", "SWORD_1~3", "SHIELD", "EVADE", "BONUS"
   power: number;      // 공격 시 칼 자루 수 (1~3), 그 외 0

@@ -19,7 +19,13 @@ export class WildcardActionValidator extends CardActionValidator {
   protected validateRule(
     params: ValidateCardActionParams,
   ): void {
-    const { room, card } = params;
+    const { room, card, chosenSuit } = params;
+
+    if (!chosenSuit) {
+      throw new WsException(
+        'Wildcard requires chosenSuit',
+      );
+    }
 
     if (!room.lastCard) {
       throw new WsException(

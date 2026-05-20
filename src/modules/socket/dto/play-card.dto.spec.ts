@@ -36,4 +36,29 @@ describe('PlayCardDto', () => {
     expect(errors.length).toBeGreaterThan(0);
     expect(errors[0].property).toBe('cardId');
   });
+
+  it('chosenSuit가 유효한 CardSuit면 통과해야 한다', async () => {
+    const target = {
+      roomId: '550e8400-e29b-41d4-a716-446655440000',
+      cardId: '770e8400-e29b-41d4-a716-446655441111',
+      chosenSuit: 'CAT',
+    };
+    const dto = plainToInstance(PlayCardDto, target);
+    const errors = await validate(dto);
+
+    expect(errors.length).toBe(0);
+  });
+
+  it('chosenSuit가 유효하지 않으면 실패해야 한다', async () => {
+    const target = {
+      roomId: '550e8400-e29b-41d4-a716-446655440000',
+      cardId: '770e8400-e29b-41d4-a716-446655441111',
+      chosenSuit: 'INVALID',
+    };
+    const dto = plainToInstance(PlayCardDto, target);
+    const errors = await validate(dto);
+
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0].property).toBe('chosenSuit');
+  });
 });

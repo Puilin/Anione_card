@@ -27,15 +27,19 @@ describe('BaseActionValidator', () => {
     validator = new TestValidator();
   });
 
-  const createMockCard = (overrides: Partial<Card> = {}) => ({
-    id: 'card-1',
-    suit: CardSuit.RABBIT,
-    value: '1',
-    type: CardType.NUMBER,
-    power: 0,
-    assetKey: 'rabbit_1',
-    ...overrides,
-  });
+  const createMockCard = (overrides: Partial<Card> = {}) => {
+    const suit = overrides.suit ?? CardSuit.RABBIT;
+    return {
+      id: 'card-1',
+      suit,
+      declaredSuit: overrides.declaredSuit ?? suit,
+      value: '1',
+      type: CardType.NUMBER,
+      power: 0,
+      assetKey: 'rabbit_1',
+      ...overrides,
+    };
+  };
 
   const createMockPlayer = (overrides: Partial<Player> = {}) => ({
     userId: 'user-1',

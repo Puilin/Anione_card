@@ -23,15 +23,19 @@ describe('AttackCardValidator', () => {
 
   const createMockCard = (
     overrides: Partial<Card> = {},
-  ): Card => ({
-    id: 'card-1',
-    suit: CardSuit.RABBIT,
-    value: 'SWORD_2',
-    type: CardType.ATTACK,
-    power: 2,
-    assetKey: 'rabbit_sword_2',
-    ...overrides,
-  });
+  ): Card => {
+    const suit = overrides.suit ?? CardSuit.RABBIT;
+    return {
+      id: 'card-1',
+      suit,
+      declaredSuit: overrides.declaredSuit ?? suit,
+      value: 'SWORD_2',
+      type: CardType.ATTACK,
+      power: 2,
+      assetKey: 'rabbit_sword_2',
+      ...overrides,
+    };
+  };
 
   const createMockPlayer = (
     overrides: Partial<Player> = {},

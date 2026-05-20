@@ -22,15 +22,19 @@ describe('WildcardActionValidator', () => {
 
   const createMockCard = (
     overrides: Partial<Card> = {},
-  ): Card => ({
-    id: 'card-1',
-    suit: CardSuit.RABBIT,
-    value: 'WILD',
-    type: CardType.WILD,
-    power: 0,
-    assetKey: 'rabbit_wild',
-    ...overrides,
-  });
+  ): Card => {
+    const suit = overrides.suit ?? CardSuit.RABBIT;
+    return {
+      id: 'card-1',
+      suit,
+      declaredSuit: overrides.declaredSuit ?? suit,
+      value: 'WILD',
+      type: CardType.WILD,
+      power: 0,
+      assetKey: 'rabbit_wild',
+      ...overrides,
+    };
+  };
 
   const createMockPlayer = (
     overrides: Partial<Player> = {},
@@ -118,6 +122,7 @@ describe('WildcardActionValidator', () => {
           room: room as GameRoom,
           player,
           card,
+          chosenSuit: CardSuit.BEAR,
         }),
       ).toThrow(WsException);
     });
@@ -148,6 +153,7 @@ describe('WildcardActionValidator', () => {
           room: room as GameRoom,
           player,
           card,
+          chosenSuit: CardSuit.RABBIT,
         }),
       ).toThrow();
     });
@@ -168,6 +174,7 @@ describe('WildcardActionValidator', () => {
           room: room as GameRoom,
           player,
           card,
+          chosenSuit: CardSuit.BEAR,
         }),
       ).not.toThrow();
     });
@@ -196,6 +203,7 @@ describe('WildcardActionValidator', () => {
           room: room as GameRoom,
           player,
           card,
+          chosenSuit: CardSuit.RABBIT,
         }),
       ).toThrow(WsException);
     });
