@@ -258,7 +258,7 @@ export class GameService {
           break;
       }
     } else if (card.type === CardType.WILD) {
-      // TODO (ANI-30)
+      // Wild는 suit 선언만 변경하고 턴/보너스 상태만 일반 진행으로 정리한다.
       room.isBonusTurn = false;
     } else {
       room.isBonusTurn = false;

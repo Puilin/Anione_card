@@ -484,6 +484,37 @@ describe('GameService (Unit)', () => {
 
       expect(room.turnOwner).toBe(host.userId);
     });
+
+    it('WILD 카드면 chosenSuit로 declaredSuit가 바뀌고 lastCard에 반영되어야 한다', () => {
+      const wildCard = createMockCard({
+        id: uuidv4(),
+        type: CardType.WILD,
+        value: 'WILD',
+        suit: CardSuit.RABBIT,
+        declaredSuit: CardSuit.RABBIT,
+      });
+
+      setHostCardForPlay(wildCard);
+
+      service.playCard(
+        host.userId,
+        wildCard.id,
+        CardSuit.CAT,
+      );
+
+      expect(wildCard.declaredSuit).toBe(CardSuit.CAT);
+      expect(room.lastCard?.id).toBe(wildCard.id);
+      expect(room.lastCard?.declaredSuit).toBe(CardSuit.CAT);
+      expect(
+        room.discardPile[room.discardPile.length - 1]
+          ?.declaredSuit,
+      ).toBe(CardSuit.CAT);
+      expect(validator.validate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          chosenSuit: CardSuit.CAT,
+        }),
+      );
+    });
   });
 });
 
