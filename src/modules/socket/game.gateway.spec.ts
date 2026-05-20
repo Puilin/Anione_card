@@ -8,7 +8,9 @@ import { SocketEvent } from 'src/shared/enums/socket-event.enum';
 import { RoomService } from './room.service';
 import { GameGateway } from './game.gateway';
 import { GameRoom } from 'src/shared/interfaces/game.interface';
-import { CardSuit, CardType } from 'src/shared/enums/game.enum';
+import { CardSuit, CardType, GameDirection } from 'src/shared/enums/game.enum';
+import { SocketData } from 'socket.io';
+import { v4 as uuidv4 } from 'uuid';
 
 describe('GameGateway', () => {
   let gateway: GameGateway;
@@ -122,3 +124,126 @@ describe('GameGateway', () => {
     });
   });
 });
+
+describe('GameGateway disconnect cleanup', () => {
+  let gateway: GameGateway;
+  let authService: jest.Mocked<AuthService>;
+  let gameService: jest.Mocked<GameService>;
+  let roomService: RoomService;
+
+  beforeEach(() => {
+    authService = createMock<AuthService>();
+    gameService = createMock<GameService>();
+    roomService = new RoomService();
+
+    gateway = new GameGateway(
+      authService,
+      roomService,
+      gameService,
+    );
+
+    gateway.server = {
+      to: jest.fn().mockReturnValue({
+        emit: jest.fn(),
+      }),
+    } as unknown as Server;
+  });
+
+  it('disconnect 시 players 목록에서 제거되어야 한다', () => {
+    const host = mockUser(false);
+    const guest = mockUser();
+    const room = roomService.createRoom(host);
+    roomService.joinRoom(room.roomId, guest);
+
+    gateway.handleDisconnect(createClient(guest));
+
+    const updatedRoom = roomService.getRoom(room.roomId);
+    expect(updatedRoom?.players.some((player) => player.userId === guest.userId)).toBe(false);
+  });
+
+  it('disconnect 시 userToRoom 인덱스가 제거되어야 한다', () => {
+    const host = mockUser(false);
+    const guest = mockUser();
+    const room = roomService.createRoom(host);
+    roomService.joinRoom(room.roomId, guest);
+
+    gateway.handleDisconnect(createClient(guest));
+
+    expect(roomService.getUserRoom(guest.userId)).toBeUndefined();
+  });
+
+  it('방장 disconnect 시 host가 다른 플레이어에게 이관되어야 한다', () => {
+    const host = mockUser(false);
+    const guest = mockUser();
+    const room = roomService.createRoom(host);
+    roomService.joinRoom(room.roomId, guest);
+
+    gateway.handleDisconnect(createClient(host));
+
+    const updatedRoom = roomService.getRoom(room.roomId);
+    expect(updatedRoom?.hostId).toBe(guest.userId);
+  });
+
+  it('턴 오너 disconnect 시 다음 턴 유저에게 턴이 넘어가야 한다', () => {
+    const host = mockUser(false);
+    const guest1 = mockUser();
+    const guest2 = mockUser();
+    const room = roomService.createRoom(host);
+
+    roomService.joinRoom(room.roomId, guest1);
+    roomService.joinRoom(room.roomId, guest2);
+
+    room.status = 'PLAYING';
+    room.direction = GameDirection.CLOCKWISE;
+    room.turnOwner = host.userId;
+
+    const expectedNextTurnOwner = roomService.getNextTurnOwner(room, host.userId);
+
+    gateway.handleDisconnect(createClient(host));
+
+    const updatedRoom = roomService.getRoom(room.roomId);
+    expect(updatedRoom?.turnOwner).toBe(expectedNextTurnOwner);
+  });
+
+  it('마지막 유저 disconnect 시 방이 삭제되어야 한다', () => {
+    const host = mockUser(false);
+    const room = roomService.createRoom(host);
+
+    gateway.handleDisconnect(createClient(host));
+
+    expect(roomService.getRoom(room.roomId)).toBeUndefined();
+  });
+
+  it('disconnect 후 재접속 시 already in a room 오류 없이 다시 입장할 수 있어야 한다', () => {
+    const host = mockUser(false);
+    const guest = mockUser();
+    const room = roomService.createRoom(host);
+
+    roomService.joinRoom(room.roomId, guest);
+    gateway.handleDisconnect(createClient(guest));
+
+    expect(() => {
+      roomService.joinRoom(room.roomId, guest);
+    }).not.toThrow(WsException);
+
+    const updatedRoom = roomService.getRoom(room.roomId);
+    expect(updatedRoom?.players.some((player) => player.userId === guest.userId)).toBe(true);
+  });
+});
+
+function createClient(user: SocketData['user']): Socket {
+  return {
+    id: uuidv4(),
+    data: { user, room: undefined },
+  } as Socket;
+}
+
+function mockUser(isGuest = true): SocketData['user'] {
+  const userId = uuidv4();
+
+  return {
+    userId,
+    nickname: `${isGuest ? 'Guest' : 'User'}_${userId.slice(0, 4)}`,
+    isGuest,
+  };
+}
