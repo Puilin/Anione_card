@@ -138,6 +138,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     const updatedRoom = this.gameService.playCard(
       client.data.user.userId,
       data.cardId,
+      data.chosenSuit,
     );
 
     this.server

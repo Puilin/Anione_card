@@ -22,15 +22,19 @@ describe('NormalCardValidator', () => {
 
   const createMockCard = (
     overrides: Partial<Card> = {},
-  ): Card => ({
-    id: 'card-1',
-    suit: CardSuit.RABBIT,
-    value: '1',
-    type: CardType.NUMBER,
-    power: 0,
-    assetKey: 'rabbit_1',
-    ...overrides,
-  });
+  ): Card => {
+    const suit = overrides.suit ?? CardSuit.RABBIT;
+    return {
+      id: 'card-1',
+      suit,
+      declaredSuit: overrides.declaredSuit ?? suit,
+      value: '1',
+      type: CardType.NUMBER,
+      power: 0,
+      assetKey: 'rabbit_1',
+      ...overrides,
+    };
+  };
 
   const createMockPlayer = (
     overrides: Partial<Player> = {},

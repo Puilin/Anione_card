@@ -43,6 +43,7 @@ export class GameSetupService {
   createCardPrototype(suit: CardSuit, type: CardType, value: string, power: number): Omit<Card, "id"> {
     return {
       suit,
+      declaredSuit: suit,
       type,
       value,
       power,

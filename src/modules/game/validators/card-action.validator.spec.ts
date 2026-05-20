@@ -37,6 +37,7 @@ describe('CardActionValidator', () => {
   const createMockCard = (overrides: Partial<Card> = {}): Card => ({
     id: 'card-1',
     suit: CardSuit.RABBIT,
+    declaredSuit: overrides.declaredSuit ?? overrides.suit ?? CardSuit.RABBIT,
     value: '1',
     type: CardType.NUMBER,
     power: 0,

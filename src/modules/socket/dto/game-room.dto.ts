@@ -1,4 +1,5 @@
-import { IsBoolean, IsDefined, IsNotEmpty, IsString, IsUUID } from "class-validator";
+import { IsBoolean, IsDefined, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from "class-validator";
+import { CardSuit } from "src/shared/enums/game.enum";
 
 export class RoomIdDto {
   @IsUUID('4', { message: '방 ID는 유효한 UUID v4 형식이어야 합니다.' })
@@ -17,4 +18,8 @@ export class PlayCardDto extends RoomIdDto {
   @IsUUID('4', { message: '카드 ID는 유효한 UUID v4 형식이어야 합니다.' })
   @IsNotEmpty({ message: '낼 카드의 ID가 필요합니다.' })
   cardId!: string;
+
+  @IsOptional()
+  @IsEnum(CardSuit, { message: 'chosenSuit는 유효한 CardSuit여야 합니다.' })
+  chosenSuit?: CardSuit;
 }

@@ -15,15 +15,19 @@ export function createSpecialValidatorFixtures(
 ) {
   const createMockCard = (
     overrides: Partial<Card> = {},
-  ): Card => ({
-    id: 'card-1',
-    suit: CardSuit.RABBIT,
-    value: specialValue,
-    type: CardType.SPECIAL,
-    power: 0,
-    assetKey,
-    ...overrides,
-  });
+  ): Card => {
+    const suit = overrides.suit ?? CardSuit.RABBIT;
+    return {
+      id: 'card-1',
+      suit,
+      declaredSuit: overrides.declaredSuit ?? suit,
+      value: specialValue,
+      type: CardType.SPECIAL,
+      power: 0,
+      assetKey,
+      ...overrides,
+    };
+  };
 
   const createMockPlayer = (
     overrides: Partial<Player> = {},

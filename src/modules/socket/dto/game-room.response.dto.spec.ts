@@ -43,9 +43,11 @@ describe('GameRoomResponseDto', () => {
 });
 
 function createMockCard(overrides?: Partial<Card>): Card {
+  const suit = overrides?.suit ?? CardSuit.RABBIT;
   return {
     id: uuidv4(),
-    suit: CardSuit.RABBIT,
+    suit,
+    declaredSuit: overrides?.declaredSuit ?? suit,
     type: CardType.NUMBER,
     value: '1',
     power: 0,

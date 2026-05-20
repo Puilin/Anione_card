@@ -12,15 +12,19 @@ import { ActionValidatorRegistry } from './action-validator.registry';
 describe('ActionValidatorRegistry', () => {
   const createMockCard = (
     overrides: Partial<Card> = {},
-  ): Card => ({
-    id: 'card-1',
-    suit: CardSuit.RABBIT,
-    value: 'JUMP',
-    type: CardType.SPECIAL,
-    power: 0,
-    assetKey: 'rabbit_jump',
-    ...overrides,
-  });
+  ): Card => {
+    const suit = overrides.suit ?? CardSuit.RABBIT;
+    return {
+      id: 'card-1',
+      suit,
+      declaredSuit: overrides.declaredSuit ?? suit,
+      value: 'JUMP',
+      type: CardType.SPECIAL,
+      power: 0,
+      assetKey: 'rabbit_jump',
+      ...overrides,
+    };
+  };
 
   const createMockValidator = (
     supportsValue: boolean,
