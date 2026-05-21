@@ -177,8 +177,24 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   // 접속 해제 확인
   handleDisconnect(client: Socket) {
     const user = client.data.user;
+    if (!user) {
+      this.logger.warn(`접속 해제된 소켓(${client.id})에 유저 세션이 없습니다.`);
+      return;
+    }
+
+    const { room, roomId, isDeleted } = this.roomService.leaveRoom(user.userId);
+
     this.logger.log(`User Disconnected: ${user.nickname} (${user.userId})`);
     this.logger.log(`접속 해제: ${client.id}`);
+
+    if (roomId) {
+      this.server.to(roomId).emit(SocketEvent.ROOM_UPDATED, {
+        room,
+        message: `${user.nickname}님이 연결 해제되었습니다. ${isDeleted ? '방이 삭제되었습니다.' : ''}`,
+      });
+    }
+
+    delete client.data.room;
   }
 
   // 클라이언트 핸드쉐이크 완료 후 초기 유저 정보 전달
