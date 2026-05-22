@@ -179,6 +179,69 @@ export class GameService {
     return room;
   }
 
+  drawCard(
+    userId: string,
+    roomId: string,
+  ): GameRoom {
+    const room = this.getValidRoom(userId);
+
+    if (room.roomId !== roomId) {
+      throw new WsException('Room ID does not match the user session');
+    }
+
+    const player = this.getPlayablePlayer(room, userId);
+    this.refillDrawPileFromDiscardPile(room, userId);
+    const card = room.drawPile.shift();
+
+    if (!card) {
+      throw new WsException('No cards left in draw pile');
+    }
+
+    player.hand.push(card);
+    player.cardCount = player.hand.length;
+    room.turnOwner = this.roomService.getNextTurnOwner(
+      room,
+      player.userId,
+    );
+    room.lastActionId += 1;
+    this.pushDrawCardLog(room, player, card);
+
+    return room;
+  }
+
+  private refillDrawPileFromDiscardPile(
+    room: GameRoom,
+    actorId: string,
+  ): void {
+    if (room.drawPile.length > 0) {
+      return;
+    }
+
+    const lastCardId = room.lastCard?.id;
+    const recyclableCards = room.discardPile.filter(
+      (card) => card.id !== lastCardId,
+    );
+
+    if (recyclableCards.length === 0) {
+      return;
+    }
+
+    this.roomService.pushLog(
+      room,
+      this.roomService.createSystemLog(
+        room,
+        actorId,
+        LogType.NOTICE,
+        '드로우할 카드가 없어 버린 패를 다시 섞습니다.',
+      ),
+    );
+    this.gameSetupService.shuffle(recyclableCards);
+    room.drawPile = recyclableCards;
+    room.discardPile = room.lastCard
+      ? [room.lastCard]
+      : [];
+  }
+
   private getPlayablePlayer(
     room: GameRoom,
     userId: string,
@@ -303,6 +366,23 @@ export class GameService {
     if (card.type === CardType.ATTACK && room.turnOwner) {
       log.targetId = room.turnOwner;
     }
+
+    this.roomService.pushLog(room, log);
+  }
+
+  private pushDrawCardLog(
+    room: GameRoom,
+    player: Player,
+    card: Card,
+  ): void {
+    const log: GameLog = {
+      id: uuidv4(),
+      type: LogType.DRAW,
+      actorId: player.userId,
+      actorName: player.nickname,
+      cardId: card.id,
+      timestamp: Date.now(),
+    };
 
     this.roomService.pushLog(room, log);
   }

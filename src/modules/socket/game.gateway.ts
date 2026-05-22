@@ -11,7 +11,7 @@ import {
 } from '@nestjs/websockets';
 import { Logger, UseFilters, UseGuards, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { Server, Socket, SocketData } from 'socket.io';
-import { JoinRoomDto, PlayCardDto } from './dto/game-room.dto';
+import { JoinRoomDto, PlayCardDto, RoomIdDto } from './dto/game-room.dto';
 import { SocketEvent } from 'src/shared/enums/socket-event.enum';
 import { SocketAuthMiddleware } from './middlewares/auth.middleware';
 import { WsExceptionFilter } from 'src/common/filters/ws-exception.filter';
@@ -147,6 +147,34 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         SocketEvent.GAME_STATE_UPDATE,
         {
           message: `${client.data.user.nickname}님이 [${updatedRoom.lastCard?.suit} ${updatedRoom.lastCard?.value}] 카드를 냈습니다.`,
+        }
+      );
+
+    return updatedRoom;
+  }
+
+  @UseGuards(GameParticipantGuard, TurnOwnerGuard)
+  @UseInterceptors(GameResponseInterceptor)
+  @SubscribeMessage(SocketEvent.DRAW_CARD)
+  handleDrawCard(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: RoomIdDto,
+  ) {
+    this.logger.log(
+      `[${SocketEvent.DRAW_CARD}] 유저 ${client.data.user.nickname}(${client.data.user.userId})가 방(${data.roomId})에서 카드 드로우 시도`
+    );
+
+    const updatedRoom = this.gameService.drawCard(
+      client.data.user.userId,
+      data.roomId,
+    );
+
+    this.server
+      .to(updatedRoom.roomId)
+      .emit(
+        SocketEvent.GAME_STATE_UPDATE,
+        {
+          message: `${client.data.user.nickname}님이 카드를 한 장 뽑았습니다.`,
         }
       );
 
