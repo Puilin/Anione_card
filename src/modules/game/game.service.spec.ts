@@ -516,6 +516,147 @@ describe('GameService (Unit)', () => {
       );
     });
   });
+
+  describe('drawCard', () => {
+    let guest: ReturnType<typeof mockUser>;
+    let drawnCard: Card;
+
+    beforeEach(() => {
+      guest = mockUser();
+      room.players.push(createPlayer(guest, true));
+
+      room.status = 'PLAYING';
+      room.turnOwner = host.userId;
+      room.direction = GameDirection.CLOCKWISE;
+      room.lastActionId = 0;
+
+      drawnCard = createMockCard({
+        id: uuidv4(),
+        suit: CardSuit.CAT,
+        type: CardType.NUMBER,
+        value: '3',
+      });
+
+      room.drawPile = [drawnCard];
+      room.players[0].hand = [];
+      room.players[0].cardCount = 0;
+
+      roomService.getNextTurnOwner.mockImplementation(
+        (targetRoom, currentUserId) => {
+          const activePlayers = targetRoom.players.filter(
+            (p) => p.role === 'PLAYER' && !p.isOut,
+          );
+
+          if (activePlayers.length === 1) {
+            return activePlayers[0].userId;
+          }
+
+          const index = activePlayers.findIndex(
+            (p) => p.userId === currentUserId,
+          );
+          const nextIndex =
+            (index + targetRoom.direction + activePlayers.length) %
+            activePlayers.length;
+
+          return activePlayers[nextIndex].userId;
+        },
+      );
+    });
+
+    it('drawPile의 맨 앞 카드를 호출한 플레이어 hand에 추가하고 턴/액션/로그를 갱신해야 한다', () => {
+      const updatedRoom = service.drawCard(
+        host.userId,
+        room.roomId,
+      );
+
+      const updatedHost = updatedRoom.players.find(
+        p => p.userId === host.userId,
+      )!;
+
+      expect(updatedHost.hand).toEqual([drawnCard]);
+      expect(updatedHost.cardCount).toBe(1);
+      expect(updatedRoom.drawPile).toEqual([]);
+      expect(updatedRoom.turnOwner).toBe(guest.userId);
+      expect(updatedRoom.lastActionId).toBe(1);
+      expect(roomService.pushLog).toHaveBeenCalledWith(
+        updatedRoom,
+        expect.objectContaining({
+          type: LogType.DRAW,
+          actorId: host.userId,
+          actorName: host.nickname,
+          cardId: drawnCard.id,
+        }),
+      );
+    });
+
+    it('요청 roomId가 서버 세션의 roomId와 다르면 예외가 발생해야 한다', () => {
+      expect(() =>
+        service.drawCard(host.userId, uuidv4()),
+      ).toThrow(
+        new WsException('Room ID does not match the user session'),
+      );
+    });
+
+    it('drawPile이 비었으면 lastCard를 제외한 discardPile을 셔플해 재사용하고 그 카드로 드로우해야 한다', () => {
+      const lastCard = createMockCard({
+        id: uuidv4(),
+        suit: CardSuit.RABBIT,
+        value: '9',
+      });
+      const recycledCardA = createMockCard({
+        id: uuidv4(),
+        suit: CardSuit.CAT,
+        value: '2',
+      });
+      const recycledCardB = createMockCard({
+        id: uuidv4(),
+        suit: CardSuit.DOG,
+        value: '4',
+      });
+
+      room.lastCard = lastCard;
+      room.drawPile = [];
+      room.discardPile = [recycledCardA, recycledCardB, lastCard];
+
+      let shuffledInput: Card[] = [];
+      gameSetupService.shuffle.mockImplementation((deck) => {
+        shuffledInput = [...deck];
+        deck.reverse();
+      });
+
+      const updatedRoom = service.drawCard(
+        host.userId,
+        room.roomId,
+      );
+      const updatedHost = updatedRoom.players.find(
+        p => p.userId === host.userId,
+      )!;
+
+      expect(shuffledInput).toEqual([
+        recycledCardA,
+        recycledCardB,
+      ]);
+      expect(updatedHost.hand).toEqual([recycledCardB]);
+      expect(updatedHost.cardCount).toBe(1);
+      expect(updatedRoom.drawPile).toEqual([recycledCardA]);
+      expect(updatedRoom.discardPile).toEqual([lastCard]);
+      expect(updatedRoom.lastCard).toBe(lastCard);
+      expect(roomService.createSystemLog).toHaveBeenCalledWith(
+        updatedRoom,
+        host.userId,
+        LogType.NOTICE,
+        '드로우할 카드가 없어 버린 패를 다시 섞습니다.',
+      );
+      expect(roomService.pushLog).toHaveBeenCalledWith(
+        updatedRoom,
+        expect.objectContaining({
+          type: LogType.DRAW,
+          actorId: host.userId,
+          cardId: recycledCardB.id,
+        }),
+      );
+    });
+  });
 });
 
 // helper functions for tests

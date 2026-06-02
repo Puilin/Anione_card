@@ -1,5 +1,7 @@
 import { createMock } from '@golevelup/ts-jest';
+import { GUARDS_METADATA, INTERCEPTORS_METADATA } from '@nestjs/common/constants';
 import { WsException } from '@nestjs/websockets';
+import { MESSAGE_MAPPING_METADATA, MESSAGE_METADATA } from '@nestjs/websockets/constants';
 import { Server, Socket } from 'socket.io';
 
 import { AuthService } from '../auth/auth.service';
@@ -11,6 +13,9 @@ import { GameRoom } from 'src/shared/interfaces/game.interface';
 import { CardSuit, CardType, GameDirection } from 'src/shared/enums/game.enum';
 import { SocketData } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
+import { GameParticipantGuard } from 'src/common/guards/game-participant.guard';
+import { TurnOwnerGuard } from 'src/common/guards/turnowner.guard';
+import { GameResponseInterceptor } from './interceptors/game-response.interceptor';
 
 describe('GameGateway', () => {
   let gateway: GameGateway;
@@ -123,6 +128,146 @@ describe('GameGateway', () => {
           },
         ),
       ).toThrow(WsException);
+    });
+  });
+
+  describe('handleDrawCard', () => {
+    it('drawCard 이벤트에서 GameService.drawCard를 호출해야 한다', () => {
+      const client = {
+        data: {
+          user: {
+            userId: 'user-1',
+            nickname: 'tester',
+            isGuest: false,
+          },
+        },
+      } as Socket;
+
+      const updatedRoom: Partial<GameRoom> = {
+        roomId: 'room-1',
+      };
+
+      gameService.drawCard.mockReturnValue(
+        updatedRoom as GameRoom,
+      );
+
+      const emit = jest.fn();
+      const to = jest.fn().mockReturnValue({
+        emit,
+      });
+
+      gateway.server = { to } as unknown as Server;
+
+      const result = gateway.handleDrawCard(
+        client,
+        {
+          roomId: 'room-1',
+        },
+      );
+
+      expect(gameService.drawCard).toHaveBeenCalledWith(
+        'user-1',
+        'room-1',
+      );
+      expect(to).toHaveBeenCalledWith(
+        'room-1',
+      );
+      expect(emit).toHaveBeenCalledWith(
+        SocketEvent.GAME_STATE_UPDATE,
+        {
+          message: `${client.data.user.nickname}님이 카드를 한 장 뽑았습니다.`,
+        },
+      );
+      expect(result).toBe(updatedRoom);
+    });
+
+    it('서비스에서 발생한 예외를 그대로 전파해야 한다', () => {
+      const client = {
+        data: {
+          user: {
+            userId: 'user-1',
+            nickname: 'tester',
+            isGuest: false,
+          },
+        },
+      } as Socket;
+
+      gameService.drawCard.mockImplementation(
+        () => {
+          throw new WsException('draw card failed');
+        },
+      );
+
+      gateway.server = {
+        to: jest.fn().mockReturnValue({
+          emit: jest.fn(),
+        }),
+      } as unknown as Server;
+
+      expect(() =>
+        gateway.handleDrawCard(
+          client,
+          {
+            roomId: 'room-1',
+          },
+        ),
+      ).toThrow(WsException);
+    });
+
+    it('payload roomId를 GameService.drawCard로 전달해야 한다', () => {
+      const client = {
+        data: {
+          user: {
+            userId: 'user-1',
+            nickname: 'tester',
+            isGuest: false,
+          },
+        },
+      } as Socket;
+
+      gameService.drawCard.mockReturnValue({
+        roomId: 'room-other',
+      } as GameRoom);
+
+      gateway.server = {
+        to: jest.fn().mockReturnValue({
+          emit: jest.fn(),
+        }),
+      } as unknown as Server;
+
+      gateway.handleDrawCard(
+        client,
+        {
+          roomId: 'room-other',
+        },
+      );
+
+      expect(gameService.drawCard).toHaveBeenCalledWith(
+        'user-1',
+        'room-other',
+      );
+    });
+
+    it('GameParticipantGuard와 TurnOwnerGuard, GameResponseInterceptor가 적용되어야 한다', () => {
+      const handler = GameGateway.prototype.handleDrawCard;
+
+      expect(
+        Reflect.getMetadata(MESSAGE_MAPPING_METADATA, handler),
+      ).toBe(true);
+      expect(
+        Reflect.getMetadata(MESSAGE_METADATA, handler),
+      ).toBe(SocketEvent.DRAW_CARD);
+      expect(
+        Reflect.getMetadata(GUARDS_METADATA, handler),
+      ).toEqual([
+        GameParticipantGuard,
+        TurnOwnerGuard,
+      ]);
+      expect(
+        Reflect.getMetadata(INTERCEPTORS_METADATA, handler),
+      ).toEqual([
+        GameResponseInterceptor,
+      ]);
     });
   });
 });
