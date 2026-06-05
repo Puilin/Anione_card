@@ -16,6 +16,7 @@ import { ShieldCardValidator } from "../game/validators/shield-card-action.valid
 import { EvadeCardValidator } from "../game/validators/evade-card-action.validator";
 import { BonusCardValidator } from "../game/validators/bonus-card-action.validator";
 import { WildcardActionValidator } from "../game/validators/wildcard-action.validator";
+import { TurnManagerService } from "../game/turn-manager.service";
 
 @Module({
   imports: [AuthModule],
@@ -35,6 +36,7 @@ import { WildcardActionValidator } from "../game/validators/wildcard-action.vali
     EvadeCardValidator,
     BonusCardValidator,
     WildcardActionValidator,
+    TurnManagerService,
     {
       provide: ACTION_VALIDATORS,
       useFactory: (

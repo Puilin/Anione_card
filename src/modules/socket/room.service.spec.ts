@@ -3,12 +3,15 @@ import { RoomService } from './room.service';
 import { GameDirection } from 'src/shared/enums/game.enum';
 import { WsException } from '@nestjs/websockets';
 import { v4 as uuidv4 } from 'uuid';
+import { TurnManagerService } from 'src/modules/game/turn-manager.service';
 
 describe('RoomService', () => {
   let service: RoomService;
 
   beforeEach(() => {
-    service = new RoomService();
+    service = new RoomService(
+      new TurnManagerService(),
+    );
   });
 
   it('여러 방은 서로 영향을 주지 않아야 한다', () => {
@@ -210,6 +213,35 @@ describe('RoomService', () => {
       const updatedRoom = service.getRoom(room.roomId);
       expect(updatedRoom!.turnOwner).toBe(expectedNext);
       expect(updatedRoom!.players.some(p => p.userId === updatedRoom!.turnOwner)).toBe(true); // 턴이 넘어간 유저가 실제 플레이어여야 한다
+    });
+
+    it('REVERSE로 방향이 바뀌고 BONUS 상태가 남아있는 상황에서 현재 턴 유저가 나가면, 반대 방향 기준으로 턴이 넘어가고 기존 턴 메타 상태는 유지되어야 한다', () => {
+      const guest1 = mockUser();
+      const guest2 = mockUser();
+      const guest3 = mockUser();
+
+      service.joinRoom(room.roomId, guest1);
+      service.joinRoom(room.roomId, guest2);
+      service.joinRoom(room.roomId, guest3);
+
+      room.status = 'PLAYING';
+      room.turnOwner = guest2.userId;
+      room.direction = GameDirection.COUNTER_CLOCKWISE;
+      room.isBonusTurn = true;
+
+      const expectedNext = service.getNextTurnOwner(
+        room,
+        room.turnOwner,
+      );
+
+      service.leaveRoom(guest2.userId);
+
+      const updatedRoom = service.getRoom(room.roomId);
+      expect(updatedRoom!.turnOwner).toBe(expectedNext);
+      expect(updatedRoom!.direction).toBe(
+        GameDirection.COUNTER_CLOCKWISE,
+      );
+      expect(updatedRoom!.isBonusTurn).toBe(true);
     });
 
     it('방에 아무도 없으면 방이 삭제되어야 한다', () => {
