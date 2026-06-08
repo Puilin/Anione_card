@@ -8,6 +8,8 @@ import { Injectable } from "@nestjs/common";
 import { ActionValidatorRegistry } from "./validators/action-validator.registry";
 import { GameLog } from "src/shared/interfaces/log.interface";
 import { v4 as uuidv4 } from 'uuid';
+import { TurnManagerService } from "./turn-manager.service";
+import { TurnEffect } from "./turn-manager.interface";
 
 @Injectable()
 export class GameService {
@@ -15,6 +17,7 @@ export class GameService {
     private readonly gameSetupService: GameSetupService,
     private readonly roomService: RoomService,
     private readonly actionValidatorRegistry: ActionValidatorRegistry,
+    private readonly turnManager: TurnManagerService,
   ) { }
 
   startGame(userId: string): GameRoom {
@@ -119,12 +122,8 @@ export class GameService {
 
     room.status = 'PLAYING';
 
-    const activePlayers = room.players.filter(
-      p => p.role === 'PLAYER' && !p.isOut
-    );
-
-    const randomIndex = Math.floor(Math.random() * activePlayers.length);
-    room.turnOwner = activePlayers[randomIndex].userId;
+    room.turnOwner =
+      this.turnManager.pickFirstTurnOwner(room);
 
     room.direction = GameDirection.CLOCKWISE;
     room.attackStack = 0;
@@ -171,7 +170,15 @@ export class GameService {
     player.cardCount = player.hand.length;
 
     this.pushToDiscardPile(room, card);
-    this.applyCardEffect(room, player, card);
+    this.applyCardStateEffect(room, card);
+    this.turnManager.applyTurnEffect({
+      room,
+      playerId: player.userId,
+      effect: this.resolveTurnEffect(
+        room,
+        card,
+      ),
+    });
     this.pushPlayCardLog(room, player, card);
 
     room.lastActionId += 1;
@@ -199,10 +206,10 @@ export class GameService {
 
     player.hand.push(card);
     player.cardCount = player.hand.length;
-    room.turnOwner = this.roomService.getNextTurnOwner(
+    this.turnManager.resolveTurnAfterDraw({
       room,
-      player.userId,
-    );
+      player,
+    });
     room.lastActionId += 1;
     this.pushDrawCardLog(room, player, card);
 
@@ -276,70 +283,78 @@ export class GameService {
     return card;
   }
 
-  private applyCardEffect(
+  private applyCardStateEffect(
     room: GameRoom,
-    player: Player,
     card: Card,
   ): void {
-    let advanceSteps = 1;
-    let keepTurn = false;
-
     if (card.type === CardType.ATTACK) {
       room.attackStack += card.power;
       room.currentPower = card.power;
     } else if (card.type === CardType.NUMBER) {
       room.attackStack = 0;
       room.currentPower = 0;
-      room.isBonusTurn = false;
     } else if (card.type === CardType.SPECIAL) {
       switch (card.value) {
         case 'SHIELD':
           room.attackStack = 0;
           room.currentPower = 0;
-          room.isBonusTurn = false;
-          break;
-        case 'EVADE':
-          // intentinally no-op
-          break;
-        case 'BONUS':
-          keepTurn = true;
-          room.isBonusTurn = true;
-          break;
-        case 'REVERSE':
-          room.direction =
-            room.direction === GameDirection.CLOCKWISE
-              ? GameDirection.COUNTER_CLOCKWISE
-              : GameDirection.CLOCKWISE;
-          room.isBonusTurn = false;
-          break;
-        case 'JUMP':
-          advanceSteps = 2;
-          room.isBonusTurn = false;
           break;
         default:
-          room.isBonusTurn = false;
           break;
       }
-    } else if (card.type === CardType.WILD) {
-      // Wild는 suit 선언만 변경하고 턴/보너스 상태만 일반 진행으로 정리한다.
-      room.isBonusTurn = false;
-    } else {
-      room.isBonusTurn = false;
+    }
+  }
+
+  private resolveTurnEffect(
+    room: GameRoom,
+    card: Card,
+  ): TurnEffect {
+    if (card.type === CardType.SPECIAL) {
+      switch (card.value) {
+        case 'BONUS':
+          return {
+            keepTurn: true,
+            advanceSteps: 1,
+            reverseDirection: false,
+            bonusTurn: true,
+          };
+        case 'REVERSE':
+          return {
+            keepTurn: false,
+            advanceSteps: 1,
+            reverseDirection: true,
+            bonusTurn: false,
+          };
+        case 'JUMP':
+          return {
+            keepTurn: false,
+            advanceSteps: 2,
+            reverseDirection: false,
+            bonusTurn: false,
+          };
+        case 'EVADE':
+          return {
+            keepTurn: false,
+            advanceSteps: 1,
+            reverseDirection: false,
+            bonusTurn: room.isBonusTurn,
+          };
+        default:
+          return {
+            keepTurn: false,
+            advanceSteps: 1,
+            reverseDirection: false,
+            bonusTurn: false,
+          };
+      }
     }
 
-    if (keepTurn) {
-      room.turnOwner = player.userId;
-      return;
-    }
-
-    let nextTurnOwner = player.userId;
-    for (let i = 0; i < advanceSteps; i += 1) {
-      nextTurnOwner = this.roomService.getNextTurnOwner(
-        room,
-        nextTurnOwner,
-      );
-    }
-    room.turnOwner = nextTurnOwner;
+    return {
+      keepTurn: false,
+      advanceSteps: 1,
+      reverseDirection: false,
+      bonusTurn: false,
+    };
   }
 
   private pushPlayCardLog(

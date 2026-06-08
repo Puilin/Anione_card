@@ -3,10 +3,12 @@ import { CardType, GameDirection } from 'src/shared/enums/game.enum';
 import { WsException } from '@nestjs/websockets';
 import { v4 as uuidv4 } from 'uuid';
 import { SocketData } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { LogType } from 'src/shared/enums/log.enum';
 import { GameLog } from 'src/shared/interfaces/log.interface';
+import { TurnManagerService } from 'src/modules/game/turn-manager.service';
 
+@Injectable()
 export class RoomService {
   // Key: roomId, Value: GameRoom
   private readonly rooms = new Map<string, GameRoom>();
@@ -16,6 +18,10 @@ export class RoomService {
   private readonly MAX_CAPACITY = 4; // players + spectators 포함
 
   private readonly logger = new Logger(RoomService.name);
+
+  constructor(
+    private readonly turnManager: TurnManagerService,
+  ) {}
 
   // roomId로 방 정보 조회
   getRoom(roomId: string): GameRoom | undefined {
@@ -125,11 +131,20 @@ export class RoomService {
     }
 
     const isTurnOwner = room.turnOwner === userId;
+    const remainingPlayers = room.players.filter(
+      (player) => player.userId !== userId,
+    );
 
     let nextTurnOwner: string | null = null;
 
-    if (room.status === 'PLAYING' && isTurnOwner)
-      nextTurnOwner = this.getNextTurnOwner(room, userId);
+    if (room.status === 'PLAYING' && isTurnOwner) {
+      nextTurnOwner =
+        this.turnManager.resolveTurnAfterLeave({
+          room,
+          currentTurnOwnerId: userId,
+          remainingPlayers,
+        });
+    }
 
     // 유저 제거
     room.players.splice(leavingIndex, 1);
@@ -159,29 +174,6 @@ export class RoomService {
     return { room: room, roomId: roomId, isDeleted: false };
   }
 
-  getNextTurnOwner(room: GameRoom, currentUserId: string): string {
-    const activePlayers = room.players.filter(
-      p => p.role === 'PLAYER' && !p.isOut
-    );
-
-    if (activePlayers.length === 0) {
-      throw new WsException('No active players');
-    }
-
-    if (activePlayers.length === 1) {
-      return activePlayers[0].userId;
-    }
-
-    const index = activePlayers.findIndex(p => p.userId === currentUserId);
-    if (index === -1) {
-      throw new WsException('Invalid user');
-    }
-
-    const nextIndex =
-      (index + room.direction + activePlayers.length) % activePlayers.length;
-
-    return activePlayers[nextIndex].userId;
-  }
 
   toggleReady(userId: string): GameRoom {
     const roomId = this.userToRoom.get(userId);

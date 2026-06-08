@@ -16,6 +16,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { GameParticipantGuard } from 'src/common/guards/game-participant.guard';
 import { TurnOwnerGuard } from 'src/common/guards/turnowner.guard';
 import { GameResponseInterceptor } from './interceptors/game-response.interceptor';
+import { TurnManagerService } from '../game/turn-manager.service';
 
 describe('GameGateway', () => {
   let gateway: GameGateway;
@@ -277,11 +278,13 @@ describe('GameGateway disconnect cleanup', () => {
   let authService: jest.Mocked<AuthService>;
   let gameService: jest.Mocked<GameService>;
   let roomService: RoomService;
+  let turnManager: jest.Mocked<TurnManagerService>;
 
   beforeEach(() => {
     authService = createMock<AuthService>();
     gameService = createMock<GameService>();
-    roomService = new RoomService();
+    turnManager = createMock<TurnManagerService>();
+    roomService = new RoomService(turnManager);
 
     gateway = new GameGateway(
       authService,
@@ -337,6 +340,10 @@ describe('GameGateway disconnect cleanup', () => {
     const guest2 = mockUser();
     const room = roomService.createRoom(host);
 
+    turnManager.resolveTurnAfterLeave.mockReturnValue(
+      guest1.userId,
+    );
+
     roomService.joinRoom(room.roomId, guest1);
     roomService.joinRoom(room.roomId, guest2);
 
@@ -344,12 +351,10 @@ describe('GameGateway disconnect cleanup', () => {
     room.direction = GameDirection.CLOCKWISE;
     room.turnOwner = host.userId;
 
-    const expectedNextTurnOwner = roomService.getNextTurnOwner(room, host.userId);
-
     gateway.handleDisconnect(createClient(host));
 
     const updatedRoom = roomService.getRoom(room.roomId);
-    expect(updatedRoom?.turnOwner).toBe(expectedNextTurnOwner);
+    expect(updatedRoom?.turnOwner).toBe(guest1.userId);
   });
 
   it('마지막 유저 disconnect 시 방이 삭제되어야 한다', () => {

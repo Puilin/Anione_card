@@ -9,12 +9,15 @@ import { LogType } from "src/shared/enums/log.enum";
 import { createMock } from '@golevelup/ts-jest';
 import { ActionValidatorRegistry } from "./validators/action-validator.registry";
 import { ActionValidator } from "./validators/action-validator.interface";
+import { TurnManagerService } from "./turn-manager.service";
+import { TurnEffect } from "./turn-manager.interface";
 
 describe('GameService (Unit)', () => {
   let service: GameService;
   let gameSetupService: jest.Mocked<GameSetupService>;
   let roomService: jest.Mocked<RoomService>;
   let actionValidatorRegistry: jest.Mocked<ActionValidatorRegistry>;
+  let turnManager: jest.Mocked<TurnManagerService>;
 
   let host: ReturnType<typeof mockUser>;
   let room: GameRoom;
@@ -23,11 +26,13 @@ describe('GameService (Unit)', () => {
     gameSetupService = createMock<GameSetupService>();
     roomService = createMock<RoomService>();
     actionValidatorRegistry = createMock<ActionValidatorRegistry>();
+    turnManager = createMock<TurnManagerService>();
 
     service = new GameService(
       gameSetupService,
       roomService,
       actionValidatorRegistry,
+      turnManager,
     );
 
     host = mockUser();
@@ -60,6 +65,32 @@ describe('GameService (Unit)', () => {
         remainingDeck: deck.slice(players.length * count),
       };
     });
+
+    turnManager.pickFirstTurnOwner.mockImplementation(
+      (targetRoom) =>
+        targetRoom.players.find(
+          (player) => player.role === 'PLAYER',
+        )!.userId,
+    );
+    turnManager.applyTurnEffect.mockImplementation(
+      ({ room: targetRoom }) => {
+        targetRoom.isBonusTurn = false;
+        targetRoom.turnOwner =
+          targetRoom.players.find(
+            (player) => player.role === 'PLAYER',
+          )!.userId;
+        return targetRoom.turnOwner;
+      },
+    );
+    turnManager.resolveTurnAfterDraw.mockImplementation(
+      ({ room: targetRoom }) => {
+        targetRoom.turnOwner =
+          targetRoom.players.find(
+            (player) => player.role === 'PLAYER',
+          )!.userId;
+        return targetRoom.turnOwner;
+      },
+    );
   });
 
   describe('startGame', () => {
@@ -275,30 +306,19 @@ describe('GameService (Unit)', () => {
       });
       room.players[0].hand = [hostCard];
       room.players[0].cardCount = 1;
+      room.players[1].hand = [];
+      room.players[1].cardCount = 0;
 
       validator = {
         supports: jest.fn().mockReturnValue(true),
         validate: jest.fn(),
       };
 
-      roomService.getNextTurnOwner.mockImplementation(
-        (targetRoom, currentUserId) => {
-          const activePlayers = targetRoom.players.filter(
-            (p) => p.role === 'PLAYER' && !p.isOut,
-          );
-
-          if (activePlayers.length === 1) {
-            return activePlayers[0].userId;
-          }
-
-          const index = activePlayers.findIndex(
-            (p) => p.userId === currentUserId,
-          );
-          const nextIndex =
-            (index + targetRoom.direction + activePlayers.length) %
-            activePlayers.length;
-
-          return activePlayers[nextIndex].userId;
+      turnManager.applyTurnEffect.mockImplementation(
+        ({ room: targetRoom }) => {
+          targetRoom.turnOwner = guest.userId;
+          targetRoom.isBonusTurn = false;
+          return guest.userId;
         },
       );
 
@@ -307,7 +327,7 @@ describe('GameService (Unit)', () => {
       );
     });
 
-    it('정상 카드 제출 시 registry를 호출해야 한다', () => {
+    it('정상 카드 제출 시 registry를 호출하고, TurnManager를 호출해야 한다', () => {
       service.playCard(host.userId, hostCard.id);
 
       expect(
@@ -324,6 +344,15 @@ describe('GameService (Unit)', () => {
           card: hostCard,
         }),
       );
+      expect(
+        turnManager.applyTurnEffect,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          room,
+          playerId: host.userId,
+          effect: expect.any(Object),
+        }),
+      );
     });
 
     it('validator 미존재/중복 예외를 그대로 전파해야 한다', () => {
@@ -334,6 +363,24 @@ describe('GameService (Unit)', () => {
       expect(() =>
         service.playCard(host.userId, hostCard.id),
       ).toThrow(WsException);
+    });
+
+    it('validator 단계에서 실패하면 TurnManager를 호출하지 않고 상태를 변경하지 않아야 한다', () => {
+      validator.validate = jest.fn(() => {
+        throw new WsException('Invalid move');
+      });
+
+      expect(() =>
+        service.playCard(host.userId, hostCard.id),
+      ).toThrow(WsException);
+
+      expect(
+        turnManager.applyTurnEffect,
+      ).not.toHaveBeenCalled();
+      expect(room.players[0].hand).toEqual([hostCard]);
+      expect(room.players[0].cardCount).toBe(1);
+      expect(room.lastCard?.id).not.toBe(hostCard.id);
+      expect(room.lastActionId).toBe(0);
     });
 
     it('검증 통과 후 hand/discard/turn/lastActionId를 반영하고 로깅해야 한다', () => {
@@ -355,6 +402,41 @@ describe('GameService (Unit)', () => {
       expect(updatedRoom.lastActionId).toBe(1);
       expect(updatedRoom.turnOwner).toBe(guest.userId);
       expect(roomService.pushLog).toHaveBeenCalledTimes(1);
+    });
+
+    it('TurnManager는 discard와 공격 상태가 반영된 뒤 호출되어야 한다', () => {
+      const attackCard = createMockCard({
+        id: uuidv4(),
+        type: CardType.ATTACK,
+        value: 'SWORD_2',
+        power: 2,
+        suit: CardSuit.RABBIT,
+      });
+
+      setHostCardForPlay(attackCard);
+
+      service.playCard(host.userId, attackCard.id);
+
+      expect(
+        turnManager.applyTurnEffect,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          room: expect.objectContaining({
+            lastCard: expect.objectContaining({
+              id: attackCard.id,
+            }),
+            attackStack: 2,
+            currentPower: 2,
+          }),
+          playerId: host.userId,
+          effect: expect.objectContaining({
+            keepTurn: false,
+            advanceSteps: 1,
+            reverseDirection: false,
+            bonusTurn: false,
+          }),
+        }),
+      );
     });
 
     const setHostCardForPlay = (
@@ -445,6 +527,13 @@ describe('GameService (Unit)', () => {
       });
 
       setHostCardForPlay(bonusCard);
+      turnManager.applyTurnEffect.mockImplementation(
+        ({ room: targetRoom, playerId }) => {
+          targetRoom.turnOwner = playerId;
+          targetRoom.isBonusTurn = true;
+          return playerId;
+        },
+      );
 
       service.playCard(host.userId, bonusCard.id);
 
@@ -462,6 +551,15 @@ describe('GameService (Unit)', () => {
 
       const previousDirection = room.direction;
       setHostCardForPlay(reverseCard);
+      turnManager.applyTurnEffect.mockImplementation(
+        ({ room: targetRoom }) => {
+          targetRoom.direction =
+            previousDirection * -1;
+          targetRoom.turnOwner = guest.userId;
+          targetRoom.isBonusTurn = false;
+          return guest.userId;
+        },
+      );
 
       service.playCard(host.userId, reverseCard.id);
 
@@ -479,6 +577,13 @@ describe('GameService (Unit)', () => {
 
       room.direction = GameDirection.CLOCKWISE;
       setHostCardForPlay(skipCard);
+      turnManager.applyTurnEffect.mockImplementation(
+        ({ room: targetRoom, playerId }) => {
+          targetRoom.turnOwner = playerId;
+          targetRoom.isBonusTurn = false;
+          return playerId;
+        },
+      );
 
       service.playCard(host.userId, skipCard.id);
 
@@ -514,6 +619,18 @@ describe('GameService (Unit)', () => {
           chosenSuit: CardSuit.CAT,
         }),
       );
+      expect(
+        turnManager.applyTurnEffect,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          effect: expect.objectContaining({
+            keepTurn: false,
+            advanceSteps: 1,
+            reverseDirection: false,
+            bonusTurn: false,
+          }),
+        }),
+      );
     });
   });
 
@@ -540,27 +657,13 @@ describe('GameService (Unit)', () => {
       room.drawPile = [drawnCard];
       room.players[0].hand = [];
       room.players[0].cardCount = 0;
-
-      roomService.getNextTurnOwner.mockImplementation(
-        (targetRoom, currentUserId) => {
-          const activePlayers = targetRoom.players.filter(
-            (p) => p.role === 'PLAYER' && !p.isOut,
-          );
-
-          if (activePlayers.length === 1) {
-            return activePlayers[0].userId;
-          }
-
-          const index = activePlayers.findIndex(
-            (p) => p.userId === currentUserId,
-          );
-          const nextIndex =
-            (index + targetRoom.direction + activePlayers.length) %
-            activePlayers.length;
-
-          return activePlayers[nextIndex].userId;
+      turnManager.resolveTurnAfterDraw.mockImplementation(
+        ({ room: targetRoom }) => {
+          targetRoom.turnOwner = guest.userId;
+          return guest.userId;
         },
       );
+
     });
 
     it('drawPile의 맨 앞 카드를 호출한 플레이어 hand에 추가하고 턴/액션/로그를 갱신해야 한다', () => {
@@ -585,6 +688,23 @@ describe('GameService (Unit)', () => {
           actorId: host.userId,
           actorName: host.nickname,
           cardId: drawnCard.id,
+        }),
+      );
+    });
+
+    it('드로우 후 TurnManager는 hand/cardCount가 반영된 플레이어 상태를 받아야 한다', () => {
+      service.drawCard(host.userId, room.roomId);
+
+      expect(
+        turnManager.resolveTurnAfterDraw,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          room,
+          player: expect.objectContaining({
+            userId: host.userId,
+            hand: [drawnCard],
+            cardCount: 1,
+          }),
         }),
       );
     });
@@ -655,6 +775,31 @@ describe('GameService (Unit)', () => {
           cardId: recycledCardB.id,
         }),
       );
+    });
+
+    it('재사용 가능한 카드가 없으면 예외를 던지고 TurnManager를 호출하지 않아야 한다', () => {
+      const lastCard = createMockCard({
+        id: uuidv4(),
+        suit: CardSuit.BEAR,
+        value: '8',
+      });
+
+      room.lastCard = lastCard;
+      room.drawPile = [];
+      room.discardPile = [lastCard];
+
+      expect(() =>
+        service.drawCard(host.userId, room.roomId),
+      ).toThrow(
+        new WsException('No cards left in draw pile'),
+      );
+
+      expect(
+        turnManager.resolveTurnAfterDraw,
+      ).not.toHaveBeenCalled();
+      expect(room.players[0].hand).toEqual([]);
+      expect(room.players[0].cardCount).toBe(0);
+      expect(room.lastActionId).toBe(0);
     });
   });
 });
