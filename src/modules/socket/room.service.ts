@@ -174,12 +174,6 @@ export class RoomService {
     return { room: room, roomId: roomId, isDeleted: false };
   }
 
-  getNextTurnOwner(room: GameRoom, currentUserId: string): string {
-    return this.turnManager.getNextActivePlayerId(
-      room,
-      currentUserId,
-    );
-  }
 
   toggleReady(userId: string): GameRoom {
     const roomId = this.userToRoom.get(userId);

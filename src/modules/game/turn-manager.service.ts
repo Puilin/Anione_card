@@ -123,7 +123,7 @@ export class TurnManagerService implements TurnManager {
     }
 
     const nextRemainingPlayer =
-      this.findNextRemainingPlayer(
+      this.findNextRemainingPlayerInTurnOrder(
         room,
         currentTurnOwnerId,
         activeRemainingPlayers,
@@ -139,7 +139,7 @@ export class TurnManagerService implements TurnManager {
     );
   }
 
-  private findNextRemainingPlayer(
+  private findNextRemainingPlayerInTurnOrder(
     room: GameRoom,
     currentTurnOwnerId: string,
     remainingPlayers: Player[],

@@ -206,12 +206,10 @@ describe('RoomService', () => {
       room.turnOwner = host.userId;
       room.direction = GameDirection.CLOCKWISE;
 
-      const expectedNext = service.getNextTurnOwner(room, room.turnOwner);
-
       service.leaveRoom(host.userId);
 
       const updatedRoom = service.getRoom(room.roomId);
-      expect(updatedRoom!.turnOwner).toBe(expectedNext);
+      expect(updatedRoom!.turnOwner).toBe(guest1.userId);
       expect(updatedRoom!.players.some(p => p.userId === updatedRoom!.turnOwner)).toBe(true); // 턴이 넘어간 유저가 실제 플레이어여야 한다
     });
 
@@ -229,15 +227,10 @@ describe('RoomService', () => {
       room.direction = GameDirection.COUNTER_CLOCKWISE;
       room.isBonusTurn = true;
 
-      const expectedNext = service.getNextTurnOwner(
-        room,
-        room.turnOwner,
-      );
-
       service.leaveRoom(guest2.userId);
 
       const updatedRoom = service.getRoom(room.roomId);
-      expect(updatedRoom!.turnOwner).toBe(expectedNext);
+      expect(updatedRoom!.turnOwner).toBe(guest1.userId);
       expect(updatedRoom!.direction).toBe(
         GameDirection.COUNTER_CLOCKWISE,
       );
@@ -249,50 +242,6 @@ describe('RoomService', () => {
 
       expect(result.isDeleted).toBe(true);
       expect(service.getRoom(room.roomId)).toBeUndefined();
-    });
-  });
-
-  describe('getNextTurnOwner', () => {
-    let room: GameRoom;
-
-    beforeEach(() => {
-      const host = mockUser();
-      room = service.createRoom(host);
-
-      const guest1 = mockUser();
-      const guest2 = mockUser();
-
-      service.joinRoom(room.roomId, guest1);
-      service.joinRoom(room.roomId, guest2);
-    });
-
-    it('direction에 따라 올바른 다음 턴 유저를 반환해야 한다', () => {
-      room.direction = GameDirection.COUNTER_CLOCKWISE;
-
-      const current = room.players[0].userId;
-      const players = room.players.map(p => p.userId);
-
-      const next = service.getNextTurnOwner(room, current);
-
-      const currentIndex = players.indexOf(current);
-      const expectedIndex = (currentIndex + room.direction + players.length) % players.length;
-
-      expect(next).toBe(players[expectedIndex]);
-    });
-
-    it('존재하지 않는 유저를 기준으로 하면 에러가 발생해야 한다', () => {
-      expect(() => {
-        service.getNextTurnOwner(room, 'invalid-user');
-      }).toThrow();
-    });
-
-    it('플레이어가 1명뿐이면 자기 자신을 반환해야 한다', () => {
-      const soloRoom = service.createRoom(mockUser());
-
-      const current = soloRoom.players[0].userId;
-      const next = service.getNextTurnOwner(soloRoom, current);
-
-      expect(next).toBe(current);
     });
   });
 
