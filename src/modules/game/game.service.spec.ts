@@ -383,7 +383,7 @@ describe('GameService (Unit)', () => {
       expect(room.lastActionId).toBe(0);
     });
 
-    it('검증 통과 후 hand/discard/turn/lastActionId를 반영하고 로깅해야 한다', () => {
+    it('검증 통과 후 hand/discard/turn을 반영하고 로깅해야 한다', () => {
       const updatedRoom = service.playCard(host.userId, hostCard.id);
 
       const updatedHost = updatedRoom.players.find(
@@ -399,7 +399,7 @@ describe('GameService (Unit)', () => {
           updatedRoom.discardPile.length - 1
         ]?.id,
       ).toBe(hostCard.id);
-      expect(updatedRoom.lastActionId).toBe(1);
+      expect(updatedRoom.lastActionId).toBe(0);
       expect(updatedRoom.turnOwner).toBe(guest.userId);
       expect(roomService.pushLog).toHaveBeenCalledTimes(1);
     });
@@ -666,7 +666,7 @@ describe('GameService (Unit)', () => {
 
     });
 
-    it('drawPile의 맨 앞 카드를 호출한 플레이어 hand에 추가하고 턴/액션/로그를 갱신해야 한다', () => {
+    it('drawPile의 맨 앞 카드를 호출한 플레이어 hand에 추가하고 턴/로그를 갱신해야 한다', () => {
       const updatedRoom = service.drawCard(
         host.userId,
         room.roomId,
@@ -680,7 +680,7 @@ describe('GameService (Unit)', () => {
       expect(updatedHost.cardCount).toBe(1);
       expect(updatedRoom.drawPile).toEqual([]);
       expect(updatedRoom.turnOwner).toBe(guest.userId);
-      expect(updatedRoom.lastActionId).toBe(1);
+      expect(updatedRoom.lastActionId).toBe(0);
       expect(roomService.pushLog).toHaveBeenCalledWith(
         updatedRoom,
         expect.objectContaining({

@@ -17,27 +17,32 @@ import { GameParticipantGuard } from 'src/common/guards/game-participant.guard';
 import { TurnOwnerGuard } from 'src/common/guards/turnowner.guard';
 import { GameResponseInterceptor } from './interceptors/game-response.interceptor';
 import { TurnManagerService } from '../game/turn-manager.service';
+import { GameActionQueue } from '../game/actions/game-action-queue.interface';
+import { GameActionType } from 'src/shared/enums/game-action-type.enum';
 
 describe('GameGateway', () => {
   let gateway: GameGateway;
   let authService: jest.Mocked<AuthService>;
   let roomService: jest.Mocked<RoomService>;
   let gameService: jest.Mocked<GameService>;
+  let gameActionQueue: jest.Mocked<GameActionQueue>;
 
   beforeEach(() => {
     authService = createMock<AuthService>();
     roomService = createMock<RoomService>();
     gameService = createMock<GameService>();
+    gameActionQueue = createMock<GameActionQueue>();
 
     gateway = new GameGateway(
       authService,
       roomService,
       gameService,
+      gameActionQueue,
     );
   });
 
   describe('handlePlayCard', () => {
-    it('playCard 이벤트에서 GameService.playCard를 호출해야 한다', () => {
+    it('playCard 이벤트에서 Queue에 액션을 enqueue하고 후조회한 room을 반환해야 한다', async () => {
       const client = {
         data: {
           user: {
@@ -61,7 +66,8 @@ describe('GameGateway', () => {
         }
       };
 
-      gameService.playCard.mockReturnValue(
+      gameActionQueue.enqueue.mockResolvedValue(undefined);
+      roomService.getRoom.mockReturnValue(
         updatedRoom as GameRoom,
       );
 
@@ -72,18 +78,24 @@ describe('GameGateway', () => {
 
       gateway.server = { to } as unknown as Server;
 
-      const result = gateway.handlePlayCard(
+      const result = await gateway.handlePlayCard(
         client,
         {
           roomId: 'room-1',
           cardId: 'card-1',
+          expectedActionId: 0,
         },
       );
 
-      expect(gameService.playCard).toHaveBeenCalledWith(
-        'user-1',
-        'card-1',
-        undefined,
+      expect(gameActionQueue.enqueue).toHaveBeenCalledWith(
+        {
+          type: GameActionType.PLAY_CARD,
+          roomId: 'room-1',
+          userId: 'user-1',
+          expectedActionId: 0,
+          cardId: 'card-1',
+          chosenSuit: undefined,
+        },
       );
       expect(to).toHaveBeenCalledWith(
         'room-1',
@@ -97,7 +109,7 @@ describe('GameGateway', () => {
       expect(result).toBe(updatedRoom);
     });
 
-    it('서비스에서 발생한 예외를 그대로 전파해야 한다', () => {
+    it('Queue에서 발생한 예외를 그대로 전파해야 한다', async () => {
       const client = {
         data: {
           user: {
@@ -108,10 +120,8 @@ describe('GameGateway', () => {
         },
       } as Socket;
 
-      gameService.playCard.mockImplementation(
-        () => {
-          throw new WsException('play card failed');
-        },
+      gameActionQueue.enqueue.mockRejectedValue(
+        new WsException('play card failed'),
       );
 
       gateway.server = {
@@ -120,20 +130,21 @@ describe('GameGateway', () => {
         }),
       } as unknown as Server;
 
-      expect(() =>
+      await expect(
         gateway.handlePlayCard(
           client,
           {
             roomId: 'room-1',
             cardId: 'card-1',
+            expectedActionId: 0,
           },
         ),
-      ).toThrow(WsException);
+      ).rejects.toThrow(WsException);
     });
   });
 
   describe('handleDrawCard', () => {
-    it('drawCard 이벤트에서 GameService.drawCard를 호출해야 한다', () => {
+    it('drawCard 이벤트에서 Queue에 액션을 enqueue하고 후조회한 room을 반환해야 한다', async () => {
       const client = {
         data: {
           user: {
@@ -148,7 +159,8 @@ describe('GameGateway', () => {
         roomId: 'room-1',
       };
 
-      gameService.drawCard.mockReturnValue(
+      gameActionQueue.enqueue.mockResolvedValue(undefined);
+      roomService.getRoom.mockReturnValue(
         updatedRoom as GameRoom,
       );
 
@@ -159,16 +171,21 @@ describe('GameGateway', () => {
 
       gateway.server = { to } as unknown as Server;
 
-      const result = gateway.handleDrawCard(
+      const result = await gateway.handleDrawCard(
         client,
         {
           roomId: 'room-1',
+          expectedActionId: 0,
         },
       );
 
-      expect(gameService.drawCard).toHaveBeenCalledWith(
-        'user-1',
-        'room-1',
+      expect(gameActionQueue.enqueue).toHaveBeenCalledWith(
+        {
+          type: GameActionType.DRAW_CARD,
+          roomId: 'room-1',
+          userId: 'user-1',
+          expectedActionId: 0,
+        },
       );
       expect(to).toHaveBeenCalledWith(
         'room-1',
@@ -182,7 +199,7 @@ describe('GameGateway', () => {
       expect(result).toBe(updatedRoom);
     });
 
-    it('서비스에서 발생한 예외를 그대로 전파해야 한다', () => {
+    it('Queue에서 발생한 예외를 그대로 전파해야 한다', async () => {
       const client = {
         data: {
           user: {
@@ -193,10 +210,8 @@ describe('GameGateway', () => {
         },
       } as Socket;
 
-      gameService.drawCard.mockImplementation(
-        () => {
-          throw new WsException('draw card failed');
-        },
+      gameActionQueue.enqueue.mockRejectedValue(
+        new WsException('draw card failed'),
       );
 
       gateway.server = {
@@ -205,17 +220,18 @@ describe('GameGateway', () => {
         }),
       } as unknown as Server;
 
-      expect(() =>
+      await expect(
         gateway.handleDrawCard(
           client,
           {
             roomId: 'room-1',
+            expectedActionId: 0,
           },
         ),
-      ).toThrow(WsException);
+      ).rejects.toThrow(WsException);
     });
 
-    it('payload roomId를 GameService.drawCard로 전달해야 한다', () => {
+    it('payload roomId와 expectedActionId를 Queue 액션으로 전달해야 한다', async () => {
       const client = {
         data: {
           user: {
@@ -226,7 +242,8 @@ describe('GameGateway', () => {
         },
       } as Socket;
 
-      gameService.drawCard.mockReturnValue({
+      gameActionQueue.enqueue.mockResolvedValue(undefined);
+      roomService.getRoom.mockReturnValue({
         roomId: 'room-other',
       } as GameRoom);
 
@@ -236,17 +253,20 @@ describe('GameGateway', () => {
         }),
       } as unknown as Server;
 
-      gateway.handleDrawCard(
+      await gateway.handleDrawCard(
         client,
         {
           roomId: 'room-other',
+          expectedActionId: 3,
         },
       );
 
-      expect(gameService.drawCard).toHaveBeenCalledWith(
-        'user-1',
-        'room-other',
-      );
+      expect(gameActionQueue.enqueue).toHaveBeenCalledWith({
+        type: GameActionType.DRAW_CARD,
+        roomId: 'room-other',
+        userId: 'user-1',
+        expectedActionId: 3,
+      });
     });
 
     it('GameParticipantGuard와 TurnOwnerGuard, GameResponseInterceptor가 적용되어야 한다', () => {
@@ -285,11 +305,13 @@ describe('GameGateway disconnect cleanup', () => {
     gameService = createMock<GameService>();
     turnManager = createMock<TurnManagerService>();
     roomService = new RoomService(turnManager);
+    gameActionQueue = createMock<GameActionQueue>();
 
     gateway = new GameGateway(
       authService,
       roomService,
       gameService,
+      gameActionQueue,
     );
 
     gateway.server = {

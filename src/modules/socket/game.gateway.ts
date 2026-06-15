@@ -9,20 +9,23 @@ import {
   MessageBody,
   WsException,
 } from '@nestjs/websockets';
-import { Logger, UseFilters, UseGuards, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Inject, Logger, UseFilters, UseGuards, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { Server, Socket, SocketData } from 'socket.io';
-import { JoinRoomDto, PlayCardDto, RoomIdDto } from './dto/game-room.dto';
+import { ActionDto, JoinRoomDto, PlayCardDto } from './dto/game-room.dto';
 import { SocketEvent } from 'src/shared/enums/socket-event.enum';
 import { SocketAuthMiddleware } from './middlewares/auth.middleware';
 import { WsExceptionFilter } from 'src/common/filters/ws-exception.filter';
 import { AuthService } from '../auth/auth.service';
-import { RoomService } from './room.service';
 import { GameService } from '../game/game.service';
+import { RoomService } from './room.service';
 import { GameResponseInterceptor } from './interceptors/game-response.interceptor';
 import { GameParticipantGuard } from 'src/common/guards/game-participant.guard';
 import { TurnOwnerGuard } from 'src/common/guards/turnowner.guard';
 import { RoomMasterGuard } from 'src/common/guards/room-master.guard';
 import { MemberOnlyGuard } from 'src/common/guards/member-only.guard';
+import { GAME_ACTION_QUEUE } from '../game/actions/game-action.token';
+import { GameActionType } from 'src/shared/enums/game-action-type.enum';
+import type { GameActionQueue } from '../game/actions/game-action-queue.interface';
 
 // 기본 ValidationPipe는 HTTP 예외를 던지므로, WebSocket에 맞게 커스텀 설정
 export const SocketValidationConfig = new ValidationPipe({
@@ -48,6 +51,8 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     private readonly authService: AuthService,
     private readonly roomService: RoomService,
     private readonly gameService: GameService,
+    @Inject(GAME_ACTION_QUEUE)
+    private readonly gameActionQueue: GameActionQueue,
   ) {}
 
   @UseGuards(MemberOnlyGuard)
@@ -128,18 +133,27 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   @UseGuards(GameParticipantGuard, TurnOwnerGuard)
   @UseInterceptors(GameResponseInterceptor)
   @SubscribeMessage(SocketEvent.PLAY_CARD)
-  handlePlayCard(
+  async handlePlayCard(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: PlayCardDto,
   ) {
     this.logger.log(
       `[${SocketEvent.PLAY_CARD}] 유저 ${client.data.user.nickname}(${client.data.user.userId})가 방(${data.roomId})에 카드(${data.cardId}) 제출 시도`
     );
-    const updatedRoom = this.gameService.playCard(
-      client.data.user.userId,
-      data.cardId,
-      data.chosenSuit,
-    );
+    await this.gameActionQueue.enqueue({
+      type: GameActionType.PLAY_CARD,
+      roomId: data.roomId,
+      userId: client.data.user.userId,
+      expectedActionId: data.expectedActionId,
+      cardId: data.cardId,
+      chosenSuit: data.chosenSuit,
+    });
+
+    const updatedRoom = this.roomService.getRoom(data.roomId);
+
+    if (!updatedRoom) {
+      throw new WsException('Room not found');
+    }
 
     this.server
       .to(updatedRoom.roomId)
@@ -156,18 +170,26 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   @UseGuards(GameParticipantGuard, TurnOwnerGuard)
   @UseInterceptors(GameResponseInterceptor)
   @SubscribeMessage(SocketEvent.DRAW_CARD)
-  handleDrawCard(
+  async handleDrawCard(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: RoomIdDto,
+    @MessageBody() data: ActionDto,
   ) {
     this.logger.log(
       `[${SocketEvent.DRAW_CARD}] 유저 ${client.data.user.nickname}(${client.data.user.userId})가 방(${data.roomId})에서 카드 드로우 시도`
     );
 
-    const updatedRoom = this.gameService.drawCard(
-      client.data.user.userId,
-      data.roomId,
-    );
+    await this.gameActionQueue.enqueue({
+      type: GameActionType.DRAW_CARD,
+      roomId: data.roomId,
+      userId: client.data.user.userId,
+      expectedActionId: data.expectedActionId,
+    });
+
+    const updatedRoom = this.roomService.getRoom(data.roomId);
+
+    if (!updatedRoom) {
+      throw new WsException('Room not found');
+    }
 
     this.server
       .to(updatedRoom.roomId)
