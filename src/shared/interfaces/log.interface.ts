@@ -12,6 +12,7 @@ export interface GameLog {
         suit?: CardSuit,
         power?: number,
         attackStack?: number,
+        drawCount?: number,
         message?: string; // 시스템 공지용 텍스트 필드
     };      // 추가 정보 저장
     timestamp: number;  // 발생 시각 (서버 기준)

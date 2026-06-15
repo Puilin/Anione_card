@@ -688,6 +688,9 @@ describe('GameService (Unit)', () => {
           actorId: host.userId,
           actorName: host.nickname,
           cardId: drawnCard.id,
+          payload: {
+            drawCount: 1,
+          },
         }),
       );
     });
@@ -773,6 +776,186 @@ describe('GameService (Unit)', () => {
           type: LogType.DRAW,
           actorId: host.userId,
           cardId: recycledCardB.id,
+          payload: {
+            drawCount: 1,
+          },
+        }),
+      );
+    });
+
+    it('공격 스택이 2면 패널티로 2장을 드로우하고 스택을 초기화해야 한다', () => {
+      const penaltyCardA = createMockCard({
+        id: uuidv4(),
+        suit: CardSuit.DOG,
+        type: CardType.NUMBER,
+        value: '4',
+      });
+      const penaltyCardB = createMockCard({
+        id: uuidv4(),
+        suit: CardSuit.BEAR,
+        type: CardType.NUMBER,
+        value: '5',
+      });
+
+      room.attackStack = 2;
+      room.currentPower = 2;
+      room.drawPile = [penaltyCardA, penaltyCardB];
+
+      const updatedRoom = service.drawCard(
+        host.userId,
+        room.roomId,
+      );
+      const updatedHost = updatedRoom.players.find(
+        p => p.userId === host.userId,
+      )!;
+
+      expect(updatedHost.hand).toEqual([
+        penaltyCardA,
+        penaltyCardB,
+      ]);
+      expect(updatedHost.cardCount).toBe(2);
+      expect(updatedRoom.attackStack).toBe(0);
+      expect(updatedRoom.currentPower).toBe(0);
+      expect(updatedRoom.drawPile).toEqual([]);
+      expect(turnManager.resolveTurnAfterDraw).toHaveBeenCalledWith(
+        expect.objectContaining({
+          room,
+          player: expect.objectContaining({
+            userId: host.userId,
+            hand: [penaltyCardA, penaltyCardB],
+            cardCount: 2,
+          }),
+        }),
+      );
+      expect(roomService.pushLog).toHaveBeenCalledWith(
+        updatedRoom,
+        expect.objectContaining({
+          type: LogType.DRAW,
+          actorId: host.userId,
+          cardId: penaltyCardB.id,
+          payload: {
+            drawCount: 2,
+          },
+        }),
+      );
+    });
+
+    it('연쇄 공격으로 attackStack이 5면 5장을 드로우해야 한다', () => {
+      const penaltyCards = Array.from({ length: 5 }, (_, index) =>
+        createMockCard({
+          id: uuidv4(),
+          suit: CardSuit.CAT,
+          type: CardType.NUMBER,
+          value: `${index + 1}`,
+        }),
+      );
+
+      room.attackStack = 5;
+      room.currentPower = 3;
+      room.drawPile = [...penaltyCards];
+
+      const updatedRoom = service.drawCard(
+        host.userId,
+        room.roomId,
+      );
+      const updatedHost = updatedRoom.players.find(
+        p => p.userId === host.userId,
+      )!;
+
+      expect(updatedHost.hand).toEqual(penaltyCards);
+      expect(updatedHost.cardCount).toBe(5);
+      expect(updatedRoom.attackStack).toBe(0);
+      expect(updatedRoom.currentPower).toBe(0);
+      expect(updatedRoom.turnOwner).toBe(guest.userId);
+      expect(roomService.pushLog).toHaveBeenCalledWith(
+        updatedRoom,
+        expect.objectContaining({
+          type: LogType.DRAW,
+          actorId: host.userId,
+          cardId: penaltyCards[4].id,
+          payload: {
+            drawCount: 5,
+          },
+        }),
+      );
+    });
+
+    it('패널티 드로우 중 drawPile이 비면 discardPile을 재활용해 남은 카드를 계속 드로우해야 한다', () => {
+      const firstPenaltyCard = createMockCard({
+        id: uuidv4(),
+        suit: CardSuit.CAT,
+        type: CardType.NUMBER,
+        value: '1',
+      });
+      const recycledCardA = createMockCard({
+        id: uuidv4(),
+        suit: CardSuit.RABBIT,
+        type: CardType.NUMBER,
+        value: '2',
+      });
+      const recycledCardB = createMockCard({
+        id: uuidv4(),
+        suit: CardSuit.BEAR,
+        type: CardType.NUMBER,
+        value: '3',
+      });
+      const lastCard = createMockCard({
+        id: uuidv4(),
+        suit: CardSuit.DOG,
+        type: CardType.ATTACK,
+        value: 'SWORD_2',
+        power: 2,
+      });
+
+      room.attackStack = 3;
+      room.currentPower = 2;
+      room.drawPile = [firstPenaltyCard];
+      room.lastCard = lastCard;
+      room.discardPile = [recycledCardA, recycledCardB, lastCard];
+
+      let shuffledInput: Card[] = [];
+      gameSetupService.shuffle.mockImplementation((deck) => {
+        shuffledInput = [...deck];
+        deck.reverse();
+      });
+
+      const updatedRoom = service.drawCard(
+        host.userId,
+        room.roomId,
+      );
+      const updatedHost = updatedRoom.players.find(
+        p => p.userId === host.userId,
+      )!;
+
+      expect(shuffledInput).toEqual([
+        recycledCardA,
+        recycledCardB,
+      ]);
+      expect(updatedHost.hand).toEqual([
+        firstPenaltyCard,
+        recycledCardB,
+        recycledCardA,
+      ]);
+      expect(updatedHost.cardCount).toBe(3);
+      expect(updatedRoom.discardPile).toEqual([lastCard]);
+      expect(updatedRoom.drawPile).toEqual([]);
+      expect(updatedRoom.attackStack).toBe(0);
+      expect(updatedRoom.currentPower).toBe(0);
+      expect(roomService.createSystemLog).toHaveBeenCalledWith(
+        updatedRoom,
+        host.userId,
+        LogType.NOTICE,
+        '드로우할 카드가 없어 버린 패를 다시 섞습니다.',
+      );
+      expect(roomService.pushLog).toHaveBeenCalledWith(
+        updatedRoom,
+        expect.objectContaining({
+          type: LogType.DRAW,
+          actorId: host.userId,
+          cardId: recycledCardA.id,
+          payload: {
+            drawCount: 3,
+          },
         }),
       );
     });
