@@ -1,0 +1,2 @@
+export const GAME_ACTION_QUEUE = Symbol('GAME_ACTION_QUEUE');
+export const GAME_ACTION_EXECUTOR = Symbol('GAME_ACTION_EXECUTOR');

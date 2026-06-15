@@ -31,6 +31,7 @@ export class GameRoomResponseDto {
   @Expose() isBonusTurn!: boolean;
   @Expose() direction!: GameDirection;
   @Expose() attackStack!: number;
+  @Expose() lastActionId!: number;
   @Expose()
   @Type(() => GameLogResponseDto)
   recentLogs!: GameLogResponseDto[];

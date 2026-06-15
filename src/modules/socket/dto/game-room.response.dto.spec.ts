@@ -40,6 +40,32 @@ describe('GameRoomResponseDto', () => {
     expect(serialized.discardPile).toBeUndefined();
   });
 
+  it('lastActionId는 직렬화 시 포함되어야 한다', () => {
+    const room: GameRoom = {
+      roomId: 'room-1',
+      hostId: 'me',
+      attackStack: 0,
+      currentPower: 0,
+      lastCard: createMockCard(),
+      drawPile: [],
+      discardPile: [],
+      lastActionId: 7,
+      turnOwner: 'me',
+      isBonusTurn: false,
+      direction: GameDirection.CLOCKWISE,
+      status: 'PLAYING',
+      recentLogs: [],
+      players: [],
+    };
+
+    const dto = plainToInstance(GameRoomResponseDto, room, {
+      excludeExtraneousValues: true,
+    });
+    const serialized = JSON.parse(JSON.stringify(dto));
+
+    expect(serialized.lastActionId).toBe(7);
+  });
+
 });
 
 function createMockCard(overrides?: Partial<Card>): Card {

@@ -1,4 +1,4 @@
-import { IsBoolean, IsDefined, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from "class-validator";
+import { IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from "class-validator";
 import { CardSuit } from "src/shared/enums/game.enum";
 
 export class RoomIdDto {
@@ -8,13 +8,19 @@ export class RoomIdDto {
   roomId!: string;
 }
 
+export class ActionDto extends RoomIdDto {
+  @IsInt({ message: 'expectedActionId는 정수여야 합니다.' })
+  @Min(0, { message: 'expectedActionId는 0 이상이어야 합니다.' })
+  expectedActionId!: number;
+}
+
 export class JoinRoomDto extends RoomIdDto {}
 
 /**
  * 단일 방 정책이어도
  * 재접속/상태복구/이벤트 명시성을 위해 roomId 유지한다.
  */
-export class PlayCardDto extends RoomIdDto {
+export class PlayCardDto extends ActionDto {
   @IsUUID('4', { message: '카드 ID는 유효한 UUID v4 형식이어야 합니다.' })
   @IsNotEmpty({ message: '낼 카드의 ID가 필요합니다.' })
   cardId!: string;

@@ -181,8 +181,6 @@ export class GameService {
     });
     this.pushPlayCardLog(room, player, card);
 
-    room.lastActionId += 1;
-
     return room;
   }
 
@@ -210,7 +208,6 @@ export class GameService {
       room,
       player,
     });
-    room.lastActionId += 1;
     this.pushDrawCardLog(room, player, card);
 
     return room;

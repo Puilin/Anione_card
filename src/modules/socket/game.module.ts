@@ -17,6 +17,9 @@ import { EvadeCardValidator } from "../game/validators/evade-card-action.validat
 import { BonusCardValidator } from "../game/validators/bonus-card-action.validator";
 import { WildcardActionValidator } from "../game/validators/wildcard-action.validator";
 import { TurnManagerService } from "../game/turn-manager.service";
+import { GAME_ACTION_EXECUTOR, GAME_ACTION_QUEUE } from "../game/actions/game-action.token";
+import { GameActionExecutorService } from "../game/actions/game-action-executor.service";
+import { InMemoryGameActionQueue } from "../game/actions/in-memory-game-action-queue.service";
 
 @Module({
   imports: [AuthModule],
@@ -37,6 +40,16 @@ import { TurnManagerService } from "../game/turn-manager.service";
     BonusCardValidator,
     WildcardActionValidator,
     TurnManagerService,
+    GameActionExecutorService,
+    InMemoryGameActionQueue,
+    {
+      provide: GAME_ACTION_EXECUTOR,
+      useExisting: GameActionExecutorService,
+    },
+    {
+      provide: GAME_ACTION_QUEUE,
+      useExisting: InMemoryGameActionQueue,
+    },
     {
       provide: ACTION_VALIDATORS,
       useFactory: (
