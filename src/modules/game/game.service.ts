@@ -195,22 +195,60 @@ export class GameService {
     }
 
     const player = this.getPlayablePlayer(room, userId);
-    this.refillDrawPileFromDiscardPile(room, userId);
-    const card = room.drawPile.shift();
+    const isPenaltyDraw =
+      room.attackStack > 0;
+    const drawCount = isPenaltyDraw
+      ? room.attackStack
+      : 1;
+    const drawnCards =
+      this.drawCardsFromPile(
+        room,
+        userId,
+        drawCount,
+      );
 
-    if (!card) {
-      throw new WsException('No cards left in draw pile');
+    player.hand.push(...drawnCards);
+    player.cardCount = player.hand.length;
+
+    if (isPenaltyDraw) {
+      room.attackStack = 0;
+      room.currentPower = 0;
+      room.isBonusTurn = false;
     }
 
-    player.hand.push(card);
-    player.cardCount = player.hand.length;
     this.turnManager.resolveTurnAfterDraw({
       room,
       player,
     });
-    this.pushDrawCardLog(room, player, card);
+    this.pushDrawCardLog(
+      room,
+      player,
+      drawnCards[drawnCards.length - 1],
+      drawCount,
+    );
 
     return room;
+  }
+
+  private drawCardsFromPile(
+    room: GameRoom,
+    actorId: string,
+    drawCount: number,
+  ): Card[] {
+    const drawnCards: Card[] = [];
+
+    for (let index = 0; index < drawCount; index += 1) {
+      this.refillDrawPileFromDiscardPile(room, actorId);
+      const card = room.drawPile.shift();
+
+      if (!card) {
+        throw new WsException('No cards left in draw pile');
+      }
+
+      drawnCards.push(card);
+    }
+
+    return drawnCards;
   }
 
   private refillDrawPileFromDiscardPile(
@@ -386,6 +424,7 @@ export class GameService {
     room: GameRoom,
     player: Player,
     card: Card,
+    drawCount = 1,
   ): void {
     const log: GameLog = {
       id: uuidv4(),
@@ -393,6 +432,9 @@ export class GameService {
       actorId: player.userId,
       actorName: player.nickname,
       cardId: card.id,
+      payload: {
+        drawCount,
+      },
       timestamp: Date.now(),
     };
 
