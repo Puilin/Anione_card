@@ -1,7 +1,13 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { GameRoomResponseDto } from './game-room.response.dto';
-import { CardSuit, CardType, GameDirection } from 'src/shared/enums/game.enum';
+import {
+  CardSuit,
+  CardType,
+  GameDirection,
+  GameStatus,
+  WinReason,
+} from 'src/shared/enums/game.enum';
 import { GameRoom, Card } from 'src/shared/interfaces/game.interface';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -20,7 +26,9 @@ describe('GameRoomResponseDto', () => {
       turnOwner: 'me',
       isBonusTurn: false,
       direction: GameDirection.CLOCKWISE,
-      status: 'PLAYING',
+      status: GameStatus.PLAYING,
+      winnerId: null,
+      winReason: null,
       recentLogs: [],
       players: [],
     };
@@ -53,7 +61,9 @@ describe('GameRoomResponseDto', () => {
       turnOwner: 'me',
       isBonusTurn: false,
       direction: GameDirection.CLOCKWISE,
-      status: 'PLAYING',
+      status: GameStatus.PLAYING,
+      winnerId: null,
+      winReason: null,
       recentLogs: [],
       players: [],
     };
@@ -64,6 +74,36 @@ describe('GameRoomResponseDto', () => {
     const serialized = JSON.parse(JSON.stringify(dto));
 
     expect(serialized.lastActionId).toBe(7);
+  });
+
+  it('게임 종료 정보는 직렬화 시 포함되어야 한다', () => {
+    const room: GameRoom = {
+      roomId: 'room-1',
+      hostId: 'me',
+      attackStack: 0,
+      currentPower: 0,
+      lastCard: createMockCard(),
+      drawPile: [],
+      discardPile: [],
+      lastActionId: 7,
+      turnOwner: null,
+      isBonusTurn: false,
+      direction: GameDirection.CLOCKWISE,
+      status: GameStatus.FINISHED,
+      winnerId: 'winner-1',
+      winReason: WinReason.EMPTY_HAND,
+      recentLogs: [],
+      players: [],
+    };
+
+    const dto = plainToInstance(GameRoomResponseDto, room, {
+      excludeExtraneousValues: true,
+    });
+    const serialized = JSON.parse(JSON.stringify(dto));
+
+    expect(serialized.status).toBe(GameStatus.FINISHED);
+    expect(serialized.winnerId).toBe('winner-1');
+    expect(serialized.winReason).toBe(WinReason.EMPTY_HAND);
   });
 
 });

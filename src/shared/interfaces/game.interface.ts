@@ -1,4 +1,10 @@
-import { CardSuit, CardType, GameDirection } from '../enums/game.enum';
+import {
+  CardSuit,
+  CardType,
+  GameDirection,
+  GameStatus,
+  WinReason,
+} from '../enums/game.enum';
 import { GameLog } from './log.interface';
 
 export interface Card {
@@ -35,6 +41,8 @@ export interface GameRoom {
   isBonusTurn: boolean; // "+" 카드 활성화 여부
   direction: GameDirection; // 게임 진행 방향 (시계/반시계)
   players: Player[];
-  status: 'WAITING' | 'PLAYING' | 'FINISHED';
+  status: GameStatus | 'WAITING' | 'PLAYING' | 'FINISHED';
+  winnerId: string | null;
+  winReason: WinReason | null;
   recentLogs: GameLog[]; // 최근 5개의 로그
 }

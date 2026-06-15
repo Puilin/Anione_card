@@ -1,6 +1,6 @@
 import { WsException } from '@nestjs/websockets';
 
-import { CardSuit, CardType } from 'src/shared/enums/game.enum';
+import { CardSuit, CardType, GameStatus } from 'src/shared/enums/game.enum';
 
 import {
   BaseActionValidator,
@@ -93,6 +93,21 @@ describe('BaseActionValidator', () => {
           player,
         }),
       ).toThrow(WsException);
+    });
+
+    it('게임이 종료된 경우 종료 예외를 던져야 한다', () => {
+      const player = createMockPlayer();
+
+      const room = createMockRoom({
+        status: GameStatus.FINISHED,
+      });
+
+      expect(() =>
+        validator.validateBase({
+          room,
+          player,
+        }),
+      ).toThrow(new WsException('Game already finished'));
     });
 
     it('플레이어 턴이 아닐 경우 예외를 던져야 한다', () => {

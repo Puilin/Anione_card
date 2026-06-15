@@ -1,6 +1,7 @@
 import { WsException } from '@nestjs/websockets';
 
 import { Card, GameRoom, Player } from 'src/shared/interfaces/game.interface';
+import { GameStatus } from 'src/shared/enums/game.enum';
 
 export interface ValidateActionParams {
   room: GameRoom;
@@ -35,7 +36,13 @@ export abstract class BaseActionValidator {
   protected validateGameStarted(
     room: GameRoom,
   ): void {
-    if (room.status !== 'PLAYING') {
+    if (room.status === GameStatus.FINISHED) {
+      throw new WsException(
+        'Game already finished',
+      );
+    }
+
+    if (room.status !== GameStatus.PLAYING) {
       throw new WsException(
         'Game has not started',
       );

@@ -8,6 +8,7 @@ import { GameActionType } from 'src/shared/enums/game-action-type.enum';
 import { GameErrorCode } from 'src/shared/enums/game-error-code.enum';
 import { GameAction } from 'src/shared/interfaces/game-action.interface';
 import { GameRoom, Player } from 'src/shared/interfaces/game.interface';
+import { GameStatus } from 'src/shared/enums/game.enum';
 
 @Injectable()
 export class GameActionExecutorService implements GameActionExecutor {
@@ -52,7 +53,11 @@ export class GameActionExecutorService implements GameActionExecutor {
       throw new WsException('Room not found');
     }
 
-    if (room.status !== 'PLAYING') {
+    if (room.status === GameStatus.FINISHED) {
+      throw new WsException('Game already finished');
+    }
+
+    if (room.status !== GameStatus.PLAYING) {
       throw new WsException('Game has not started');
     }
 

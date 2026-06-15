@@ -26,6 +26,8 @@ import { MemberOnlyGuard } from 'src/common/guards/member-only.guard';
 import { GAME_ACTION_QUEUE } from '../game/actions/game-action.token';
 import { GameActionType } from 'src/shared/enums/game-action-type.enum';
 import type { GameActionQueue } from '../game/actions/game-action-queue.interface';
+import { VictoryService } from '../game/victory.service';
+import { VictoryTrigger } from 'src/shared/enums/game.enum';
 
 // 기본 ValidationPipe는 HTTP 예외를 던지므로, WebSocket에 맞게 커스텀 설정
 export const SocketValidationConfig = new ValidationPipe({
@@ -51,6 +53,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     private readonly authService: AuthService,
     private readonly roomService: RoomService,
     private readonly gameService: GameService,
+    private readonly victoryService: VictoryService,
     @Inject(GAME_ACTION_QUEUE)
     private readonly gameActionQueue: GameActionQueue,
   ) {}
@@ -97,6 +100,17 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     @ConnectedSocket() client: Socket,
   ) {
     const { room, roomId, isDeleted } = this.roomService.leaveRoom(client.data.user.userId);
+    const victory = room
+      ? this.victoryService.determineWinner({
+          room,
+          trigger: VictoryTrigger.PLAYER_LEFT,
+          actorId: client.data.user.userId,
+        })
+      : null;
+
+    if (room && victory) {
+      this.gameService.finishGame(room, victory);
+    }
 
     if (!roomId) {
       return;
@@ -106,6 +120,14 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     client.to(roomId).emit(SocketEvent.ROOM_UPDATED, {
       message: `${client.data.user.nickname}님이 퇴장하셨습니다. ${isDeleted ? '방이 삭제되었습니다.' : ''}`,
     });
+
+    if (room && victory) {
+      this.server.to(roomId).emit(SocketEvent.GAME_OVER, {
+        winnerId: room.winnerId,
+        winReason: room.winReason,
+        message: `${victory.winner.nickname}님이 마지막 플레이어로 남아 승리했습니다.`,
+      });
+    }
 
     client.leave(roomId);
 
@@ -163,6 +185,20 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
           message: `${client.data.user.nickname}님이 [${updatedRoom.lastCard?.suit} ${updatedRoom.lastCard?.value}] 카드를 냈습니다.`,
         }
       );
+
+    if (
+      updatedRoom.status === 'FINISHED' &&
+      updatedRoom.winnerId
+    ) {
+      this.server.to(updatedRoom.roomId).emit(
+        SocketEvent.GAME_OVER,
+        {
+          winnerId: updatedRoom.winnerId,
+          winReason: updatedRoom.winReason,
+          message: `${client.data.user.nickname}님이 승리했습니다.`,
+        },
+      );
+    }
 
     return updatedRoom;
   }
@@ -232,6 +268,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       return;
     }
 
+    // TODO (ANI-15): 재접속 시 세션 복구를 지원할 수 있도록 disconnect와 명시적 leaveRoom 처리를 분리할 예정
     const { room, roomId, isDeleted } = this.roomService.leaveRoom(user.userId);
 
     this.logger.log(`User Disconnected: ${user.nickname} (${user.userId})`);

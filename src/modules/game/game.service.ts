@@ -2,7 +2,14 @@ import { Card, GameRoom, Player } from "src/shared/interfaces/game.interface";
 import { GameSetupService } from "./game-setup.service";
 import { RoomService } from "../socket/room.service";
 import { WsException } from "@nestjs/websockets";
-import { CardSuit, CardType, GameDirection } from "../../shared/enums/game.enum";
+import {
+  CardSuit,
+  CardType,
+  GameDirection,
+  GameStatus,
+  VictoryTrigger,
+  WinReason,
+} from "../../shared/enums/game.enum";
 import { LogType } from "src/shared/enums/log.enum";
 import { Injectable } from "@nestjs/common";
 import { ActionValidatorRegistry } from "./validators/action-validator.registry";
@@ -10,6 +17,10 @@ import { GameLog } from "src/shared/interfaces/log.interface";
 import { v4 as uuidv4 } from 'uuid';
 import { TurnManagerService } from "./turn-manager.service";
 import { TurnEffect } from "./turn-manager.interface";
+import {
+  VictoryResult,
+  VictoryService,
+} from "./victory.service";
 
 @Injectable()
 export class GameService {
@@ -18,6 +29,7 @@ export class GameService {
     private readonly roomService: RoomService,
     private readonly actionValidatorRegistry: ActionValidatorRegistry,
     private readonly turnManager: TurnManagerService,
+    private readonly victoryService: VictoryService,
   ) { }
 
   startGame(userId: string): GameRoom {
@@ -64,7 +76,7 @@ export class GameService {
       throw new WsException('Only host can start the game');
     }
 
-    if (room.status !== 'WAITING') {
+    if (room.status !== GameStatus.WAITING) {
       throw new WsException('Game already started or finished');
     }
 
@@ -120,7 +132,9 @@ export class GameService {
     this.initDiscardPile(room, firstCard);
     room.drawPile = remainingDeck;
 
-    room.status = 'PLAYING';
+    room.status = GameStatus.PLAYING;
+    room.winnerId = null;
+    room.winReason = null;
 
     room.turnOwner =
       this.turnManager.pickFirstTurnOwner(room);
@@ -170,6 +184,18 @@ export class GameService {
     player.cardCount = player.hand.length;
 
     this.pushToDiscardPile(room, card);
+    const victory =
+      this.victoryService.determineWinner({
+        room,
+        trigger: VictoryTrigger.CARD_PLAYED,
+        actorId: player.userId,
+      });
+
+    if (victory) {
+      this.finishGame(room, victory);
+      return room;
+    }
+
     this.applyCardStateEffect(room, card);
     this.turnManager.applyTurnEffect({
       room,
@@ -471,5 +497,34 @@ export class GameService {
   getGameState(userId: string): GameRoom {
     const room = this.getValidRoom(userId);
     return room;
+  }
+
+  finishGame(
+    room: GameRoom,
+    victory: Exclude<VictoryResult, null>,
+  ): void {
+    room.status = GameStatus.FINISHED;
+    room.winnerId = victory.winner.userId;
+    room.winReason = victory.reason;
+    room.turnOwner = null;
+    room.isBonusTurn = false;
+
+    const message =
+      victory.reason === WinReason.PLAYER_LEAVE
+        ? `${victory.winner.nickname}님이 마지막 플레이어로 남아 승리했습니다.`
+        : `${victory.winner.nickname}님이 모든 카드를 소진해 승리했습니다.`;
+
+    const log: GameLog = {
+      id: uuidv4(),
+      type: LogType.GAME_END,
+      actorId: victory.winner.userId,
+      actorName: victory.winner.nickname,
+      payload: {
+        message,
+      },
+      timestamp: Date.now(),
+    };
+
+    this.roomService.pushLog(room, log);
   }
 }  

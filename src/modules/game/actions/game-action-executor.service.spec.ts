@@ -7,7 +7,7 @@ import { GameService } from '../game.service';
 import { RoomService } from 'src/modules/socket/room.service';
 import { GameActionType } from 'src/shared/enums/game-action-type.enum';
 import { GameErrorCode } from 'src/shared/enums/game-error-code.enum';
-import { CardSuit, CardType, GameDirection } from 'src/shared/enums/game.enum';
+import { CardSuit, CardType, GameDirection, GameStatus } from 'src/shared/enums/game.enum';
 import { Card, GameRoom, Player } from 'src/shared/interfaces/game.interface';
 
 describe('GameActionExecutorService', () => {
@@ -108,6 +108,23 @@ describe('GameActionExecutorService', () => {
     expect(gameService.playCard).not.toHaveBeenCalled();
     expect(room.lastActionId).toBe(3);
   });
+
+  it('종료된 게임에서는 액션을 실행하지 않아야 한다', async () => {
+    room.status = GameStatus.FINISHED;
+
+    await expect(
+      executor.execute({
+        type: GameActionType.PLAY_CARD,
+        roomId: room.roomId,
+        userId: host.userId,
+        expectedActionId: 3,
+        cardId: 'card-1',
+      }),
+    ).rejects.toThrow(new WsException('Game already finished'));
+
+    expect(gameService.playCard).not.toHaveBeenCalled();
+    expect(room.lastActionId).toBe(3);
+  });
 });
 
 function createRoom(host: Player, guest: Player): GameRoom {
@@ -124,7 +141,9 @@ function createRoom(host: Player, guest: Player): GameRoom {
     isBonusTurn: false,
     direction: GameDirection.CLOCKWISE,
     players: [host, guest],
-    status: 'PLAYING',
+    status: GameStatus.PLAYING,
+    winnerId: null,
+    winReason: null,
     recentLogs: [],
   };
 }
