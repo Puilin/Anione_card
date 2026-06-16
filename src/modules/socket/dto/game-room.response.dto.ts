@@ -1,5 +1,11 @@
 import { Exclude, Expose, Type } from 'class-transformer';
-import { CardSuit, CardType, GameDirection } from 'src/shared/enums/game.enum';
+import {
+  CardSuit,
+  CardType,
+  GameDirection,
+  GameStatus,
+  WinReason,
+} from 'src/shared/enums/game.enum';
 
 @Exclude()
 export class CardResponseDto {
@@ -31,6 +37,9 @@ export class GameRoomResponseDto {
   @Expose() isBonusTurn!: boolean;
   @Expose() direction!: GameDirection;
   @Expose() attackStack!: number;
+  @Expose() status!: GameStatus;
+  @Expose() winnerId!: string | null;
+  @Expose() winReason!: WinReason | null;
   @Expose() lastActionId!: number;
   @Expose()
   @Type(() => GameLogResponseDto)

@@ -1,5 +1,12 @@
 import { WsException } from "@nestjs/websockets";
-import { CardSuit, CardType, GameDirection } from "src/shared/enums/game.enum";
+import {
+  CardSuit,
+  CardType,
+  GameDirection,
+  GameStatus,
+  VictoryTrigger,
+  WinReason,
+} from "src/shared/enums/game.enum";
 import { Card, GameRoom, Player } from "src/shared/interfaces/game.interface";
 import { v4 as uuidv4 } from 'uuid';
 import { GameSetupService } from "./game-setup.service";
@@ -11,6 +18,7 @@ import { ActionValidatorRegistry } from "./validators/action-validator.registry"
 import { ActionValidator } from "./validators/action-validator.interface";
 import { TurnManagerService } from "./turn-manager.service";
 import { TurnEffect } from "./turn-manager.interface";
+import { VictoryService } from "./victory.service";
 
 describe('GameService (Unit)', () => {
   let service: GameService;
@@ -18,6 +26,7 @@ describe('GameService (Unit)', () => {
   let roomService: jest.Mocked<RoomService>;
   let actionValidatorRegistry: jest.Mocked<ActionValidatorRegistry>;
   let turnManager: jest.Mocked<TurnManagerService>;
+  let victoryService: jest.Mocked<VictoryService>;
 
   let host: ReturnType<typeof mockUser>;
   let room: GameRoom;
@@ -27,12 +36,14 @@ describe('GameService (Unit)', () => {
     roomService = createMock<RoomService>();
     actionValidatorRegistry = createMock<ActionValidatorRegistry>();
     turnManager = createMock<TurnManagerService>();
+    victoryService = createMock<VictoryService>();
 
     service = new GameService(
       gameSetupService,
       roomService,
       actionValidatorRegistry,
       turnManager,
+      victoryService,
     );
 
     host = mockUser();
@@ -91,6 +102,7 @@ describe('GameService (Unit)', () => {
         return targetRoom.turnOwner;
       },
     );
+    victoryService.determineWinner.mockReturnValue(null);
   });
 
   describe('startGame', () => {
@@ -437,6 +449,65 @@ describe('GameService (Unit)', () => {
           }),
         }),
       );
+    });
+
+    it('마지막 카드를 discard에 반영한 뒤 승리 판정을 수행하고 게임을 종료해야 한다', () => {
+      victoryService.determineWinner.mockImplementation((context) => {
+        expect(context.room.lastCard?.id).toBe(hostCard.id);
+        expect(
+          context.room.discardPile[context.room.discardPile.length - 1]?.id,
+        ).toBe(hostCard.id);
+        expect(context.trigger).toBe(VictoryTrigger.CARD_PLAYED);
+        return {
+          winner: context.room.players.find((player) => player.userId === host.userId)!,
+          reason: WinReason.EMPTY_HAND,
+        };
+      });
+
+      const updatedRoom = service.playCard(host.userId, hostCard.id);
+      const updatedHost = updatedRoom.players.find(
+        (player) => player.userId === host.userId,
+      )!;
+
+      expect(updatedHost.hand).toHaveLength(0);
+      expect(updatedRoom.status).toBe(GameStatus.FINISHED);
+      expect(updatedRoom.winnerId).toBe(host.userId);
+      expect(updatedRoom.winReason).toBe(WinReason.EMPTY_HAND);
+      expect(updatedRoom.turnOwner).toBeNull();
+      expect(turnManager.applyTurnEffect).not.toHaveBeenCalled();
+      expect(roomService.pushLog).toHaveBeenCalledWith(
+        room,
+        expect.objectContaining({
+          type: LogType.GAME_END,
+          actorId: host.userId,
+        }),
+      );
+    });
+
+    it('마지막 카드가 ATTACK이어도 승리 처리되어 턴 진행이 멈춰야 한다', () => {
+      const attackCard = createMockCard({
+        id: uuidv4(),
+        type: CardType.ATTACK,
+        value: 'SWORD_3',
+        power: 3,
+        suit: CardSuit.RABBIT,
+      });
+
+      setHostCardForPlay(attackCard);
+      victoryService.determineWinner.mockImplementation(
+        (context) => ({
+          winner: context.room.players.find((player) => player.userId === host.userId)!,
+          reason: WinReason.EMPTY_HAND,
+        }),
+      );
+
+      service.playCard(host.userId, attackCard.id);
+
+      expect(room.status).toBe(GameStatus.FINISHED);
+      expect(room.winnerId).toBe(host.userId);
+      expect(room.attackStack).toBe(0);
+      expect(room.currentPower).toBe(0);
+      expect(turnManager.applyTurnEffect).not.toHaveBeenCalled();
     });
 
     const setHostCardForPlay = (
@@ -1003,6 +1074,8 @@ function createMockRoom(host: ReturnType<typeof mockUser>): GameRoom {
     direction: GameDirection.CLOCKWISE,
     players: [createPlayer(host, true)],
     status: 'WAITING',
+    winnerId: null,
+    winReason: null,
     recentLogs: [],
   };
 }

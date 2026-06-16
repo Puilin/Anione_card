@@ -27,6 +27,8 @@ describe('MaskingService', () => {
       isBonusTurn: false,
       direction: GameDirection.CLOCKWISE,
       status: 'PLAYING',
+      winnerId: null,
+      winReason: null,
       recentLogs: [],
       players: [
         {

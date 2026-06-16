@@ -16,3 +16,19 @@ export enum GameDirection {
   CLOCKWISE = 1, // 시계 방향
   COUNTER_CLOCKWISE = -1, // 반시계 방향
 }
+
+export enum GameStatus {
+  WAITING = 'WAITING',
+  PLAYING = 'PLAYING',
+  FINISHED = 'FINISHED',
+}
+
+export enum WinReason {
+  EMPTY_HAND = 'EMPTY_HAND',
+  PLAYER_LEAVE = 'PLAYER_LEAVE',
+}
+
+export enum VictoryTrigger {
+  CARD_PLAYED = 'CARD_PLAYED',
+  PLAYER_LEFT = 'PLAYER_LEFT',
+}

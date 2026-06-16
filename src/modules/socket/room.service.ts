@@ -1,5 +1,5 @@
 import { Card, GameRoom, Player } from 'src/shared/interfaces/game.interface';
-import { CardType, GameDirection } from 'src/shared/enums/game.enum';
+import { CardType, GameDirection, GameStatus } from 'src/shared/enums/game.enum';
 import { WsException } from '@nestjs/websockets';
 import { v4 as uuidv4 } from 'uuid';
 import { SocketData } from 'socket.io';
@@ -67,7 +67,9 @@ export class RoomService {
       isBonusTurn: false,
       direction: GameDirection.CLOCKWISE,
       players: [hostPlayer],
-      status: 'WAITING',
+      status: GameStatus.WAITING,
+      winnerId: null,
+      winReason: null,
       recentLogs: [],
     };
 
@@ -85,7 +87,7 @@ export class RoomService {
       throw new WsException('User already in a room');
     }
 
-    const isPlaying = room.status === 'PLAYING';
+    const isPlaying = room.status === GameStatus.PLAYING;
 
     if (room.players.length >= this.MAX_CAPACITY) {
       throw new WsException('Room is full');
@@ -137,7 +139,7 @@ export class RoomService {
 
     let nextTurnOwner: string | null = null;
 
-    if (room.status === 'PLAYING' && isTurnOwner) {
+    if (room.status === GameStatus.PLAYING && isTurnOwner) {
       nextTurnOwner =
         this.turnManager.resolveTurnAfterLeave({
           room,
@@ -192,7 +194,7 @@ export class RoomService {
     }
 
     // 게임 중에는 변경 불가
-    if (room.status === 'PLAYING') {
+    if (room.status === GameStatus.PLAYING) {
       throw new WsException('Cannot change ready state during game');
     }
 

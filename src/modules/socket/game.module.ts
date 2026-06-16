@@ -20,6 +20,7 @@ import { TurnManagerService } from "../game/turn-manager.service";
 import { GAME_ACTION_EXECUTOR, GAME_ACTION_QUEUE } from "../game/actions/game-action.token";
 import { GameActionExecutorService } from "../game/actions/game-action-executor.service";
 import { InMemoryGameActionQueue } from "../game/actions/in-memory-game-action-queue.service";
+import { VictoryService } from "../game/victory.service";
 
 @Module({
   imports: [AuthModule],
@@ -40,6 +41,7 @@ import { InMemoryGameActionQueue } from "../game/actions/in-memory-game-action-q
     BonusCardValidator,
     WildcardActionValidator,
     TurnManagerService,
+    VictoryService,
     GameActionExecutorService,
     InMemoryGameActionQueue,
     {

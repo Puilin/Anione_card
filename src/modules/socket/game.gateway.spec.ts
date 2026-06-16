@@ -10,7 +10,7 @@ import { SocketEvent } from 'src/shared/enums/socket-event.enum';
 import { RoomService } from './room.service';
 import { GameGateway } from './game.gateway';
 import { GameRoom } from 'src/shared/interfaces/game.interface';
-import { CardSuit, CardType, GameDirection } from 'src/shared/enums/game.enum';
+import { CardSuit, CardType, GameDirection, GameStatus, WinReason } from 'src/shared/enums/game.enum';
 import { SocketData } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 import { GameParticipantGuard } from 'src/common/guards/game-participant.guard';
@@ -19,6 +19,7 @@ import { GameResponseInterceptor } from './interceptors/game-response.intercepto
 import { TurnManagerService } from '../game/turn-manager.service';
 import { GameActionQueue } from '../game/actions/game-action-queue.interface';
 import { GameActionType } from 'src/shared/enums/game-action-type.enum';
+import { VictoryService } from '../game/victory.service';
 
 describe('GameGateway', () => {
   let gateway: GameGateway;
@@ -26,17 +27,20 @@ describe('GameGateway', () => {
   let roomService: jest.Mocked<RoomService>;
   let gameService: jest.Mocked<GameService>;
   let gameActionQueue: jest.Mocked<GameActionQueue>;
+  let victoryService: jest.Mocked<VictoryService>;
 
   beforeEach(() => {
     authService = createMock<AuthService>();
     roomService = createMock<RoomService>();
     gameService = createMock<GameService>();
     gameActionQueue = createMock<GameActionQueue>();
+    victoryService = createMock<VictoryService>();
 
     gateway = new GameGateway(
       authService,
       roomService,
       gameService,
+      victoryService,
       gameActionQueue,
     );
   });
@@ -55,6 +59,9 @@ describe('GameGateway', () => {
 
       const updatedRoom: Partial<GameRoom> = {
         roomId: 'room-1',
+        status: GameStatus.PLAYING,
+        winnerId: null,
+        winReason: null,
         lastCard: {
           id: 'card-1',
           type: CardType.NUMBER,
@@ -109,6 +116,70 @@ describe('GameGateway', () => {
       expect(result).toBe(updatedRoom);
     });
 
+    it('종료된 상태라면 GAME_OVER 이벤트도 전송해야 한다', async () => {
+      const client = {
+        data: {
+          user: {
+            userId: 'user-1',
+            nickname: 'tester',
+            isGuest: false,
+          },
+        },
+      } as Socket;
+
+      const updatedRoom: Partial<GameRoom> = {
+        roomId: 'room-1',
+        status: GameStatus.FINISHED,
+        winnerId: 'user-1',
+        winReason: WinReason.EMPTY_HAND,
+        lastCard: {
+          id: 'card-1',
+          type: CardType.NUMBER,
+          power: 0,
+          suit: CardSuit.RABBIT,
+          declaredSuit: CardSuit.RABBIT,
+          value: '3',
+          assetKey: 'rabbit_3',
+        },
+      };
+
+      gameActionQueue.enqueue.mockResolvedValue(undefined);
+      roomService.getRoom.mockReturnValue(updatedRoom as GameRoom);
+
+      const emit = jest.fn();
+      const to = jest.fn().mockReturnValue({
+        emit,
+      });
+
+      gateway.server = { to } as unknown as Server;
+
+      await gateway.handlePlayCard(
+        client,
+        {
+          roomId: 'room-1',
+          cardId: 'card-1',
+          expectedActionId: 0,
+        },
+      );
+
+      expect(emit).toHaveBeenNthCalledWith(
+        1,
+        SocketEvent.GAME_STATE_UPDATE,
+        {
+          message: `${client.data.user.nickname}님이 [${updatedRoom.lastCard?.suit} ${updatedRoom.lastCard?.value}] 카드를 냈습니다.`,
+        },
+      );
+      expect(emit).toHaveBeenNthCalledWith(
+        2,
+        SocketEvent.GAME_OVER,
+        {
+          winnerId: 'user-1',
+          winReason: WinReason.EMPTY_HAND,
+          message: `${client.data.user.nickname}님이 승리했습니다.`,
+        },
+      );
+    });
+
     it('Queue에서 발생한 예외를 그대로 전파해야 한다', async () => {
       const client = {
         data: {
@@ -157,6 +228,9 @@ describe('GameGateway', () => {
 
       const updatedRoom: Partial<GameRoom> = {
         roomId: 'room-1',
+        status: GameStatus.PLAYING,
+        winnerId: null,
+        winReason: null,
       };
 
       gameActionQueue.enqueue.mockResolvedValue(undefined);
@@ -291,6 +365,72 @@ describe('GameGateway', () => {
       ]);
     });
   });
+
+  describe('handleLeaveRoom', () => {
+    it('명시적 퇴장 후 마지막 플레이어만 남으면 GAME_OVER를 전송해야 한다', () => {
+      const room = {
+        roomId: 'room-1',
+        winnerId: 'winner-1',
+        winReason: WinReason.PLAYER_LEAVE,
+      } as GameRoom;
+      const client = {
+        data: {
+          user: {
+            userId: 'user-1',
+            nickname: 'tester',
+            isGuest: false,
+          },
+        },
+        to: jest.fn().mockReturnValue({
+          emit: jest.fn(),
+        }),
+        leave: jest.fn(),
+      } as unknown as Socket;
+
+      roomService.leaveRoom.mockReturnValue({
+        room,
+        roomId: 'room-1',
+        isDeleted: false,
+      });
+      victoryService.determineWinner.mockReturnValue({
+        winner: {
+          userId: 'winner-1',
+          nickname: 'winner',
+          isGuest: false,
+          hand: [],
+          cardCount: 0,
+          isReady: true,
+          isOut: false,
+          role: 'PLAYER',
+        },
+        reason: WinReason.PLAYER_LEAVE,
+      });
+
+      const emit = jest.fn();
+      gateway.server = {
+        to: jest.fn().mockReturnValue({
+          emit,
+        }),
+      } as unknown as Server;
+
+      gateway.handleLeaveRoom(client);
+
+      expect(victoryService.determineWinner).toHaveBeenCalledWith({
+        room,
+        trigger: 'PLAYER_LEFT',
+        actorId: 'user-1',
+      });
+      expect(gameService.finishGame).toHaveBeenCalled();
+      expect(emit).toHaveBeenCalledWith(
+        SocketEvent.GAME_OVER,
+        {
+          winnerId: 'winner-1',
+          winReason: WinReason.PLAYER_LEAVE,
+          message: 'winner님이 마지막 플레이어로 남아 승리했습니다.',
+        },
+      );
+    });
+  });
 });
 
 describe('GameGateway disconnect cleanup', () => {
@@ -299,11 +439,14 @@ describe('GameGateway disconnect cleanup', () => {
   let gameService: jest.Mocked<GameService>;
   let roomService: RoomService;
   let turnManager: jest.Mocked<TurnManagerService>;
+  let victoryService: jest.Mocked<VictoryService>;
+  let gameActionQueue: jest.Mocked<GameActionQueue>;
 
   beforeEach(() => {
     authService = createMock<AuthService>();
     gameService = createMock<GameService>();
     turnManager = createMock<TurnManagerService>();
+    victoryService = createMock<VictoryService>();
     roomService = new RoomService(turnManager);
     gameActionQueue = createMock<GameActionQueue>();
 
@@ -311,6 +454,7 @@ describe('GameGateway disconnect cleanup', () => {
       authService,
       roomService,
       gameService,
+      victoryService,
       gameActionQueue,
     );
 
@@ -402,6 +546,17 @@ describe('GameGateway disconnect cleanup', () => {
 
     const updatedRoom = roomService.getRoom(room.roomId);
     expect(updatedRoom?.players.some((player) => player.userId === guest.userId)).toBe(true);
+  });
+
+  it('disconnect에서는 승리 판정을 시도하지 않아야 한다', () => {
+    const host = mockUser(false);
+    const guest = mockUser();
+    const room = roomService.createRoom(host);
+
+    roomService.joinRoom(room.roomId, guest);
+    gateway.handleDisconnect(createClient(guest));
+
+    expect(victoryService.determineWinner).not.toHaveBeenCalled();
   });
 });
 

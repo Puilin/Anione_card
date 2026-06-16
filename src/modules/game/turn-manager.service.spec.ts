@@ -414,6 +414,8 @@ function createMockRoom(
     direction: GameDirection.CLOCKWISE,
     players,
     status: 'PLAYING',
+    winnerId: null,
+    winReason: null,
     recentLogs: [],
     ...overrides,
   };
