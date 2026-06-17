@@ -27,7 +27,8 @@ import { GAME_ACTION_QUEUE } from '../game/actions/game-action.token';
 import { GameActionType } from 'src/shared/enums/game-action-type.enum';
 import type { GameActionQueue } from '../game/actions/game-action-queue.interface';
 import { VictoryService } from '../game/victory.service';
-import { VictoryTrigger } from 'src/shared/enums/game.enum';
+import { GameStatus, VictoryTrigger } from 'src/shared/enums/game.enum';
+import { GameRoom } from 'src/shared/interfaces/game.interface';
 
 // 기본 ValidationPipe는 HTTP 예외를 던지므로, WebSocket에 맞게 커스텀 설정
 export const SocketValidationConfig = new ValidationPipe({
@@ -83,13 +84,20 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   ) {
     this.logger.log(`[${SocketEvent.JOIN_ROOM}] 유저 ${client.data.user.nickname}(${client.data.user.userId})가 방(${data.roomId}) 입장 시도`);
     const room = this.roomService.joinRoom(data.roomId, client.data.user);
+    const joinedPlayer = room.players.find(
+      (player) => player.userId === client.data.user.userId,
+    );
 
     // Socket.io의 'Room' 개념에 클라이언트를 넣어줍니다.
     client.join(room.roomId);
 
     // 방에 있는 모든 사람(나 포함)에게 새로운 유저가 왔음을 알립니다.
     this.server.to(room.roomId).emit(SocketEvent.ROOM_UPDATED, {
-      message: `${client.data.user.nickname}님이 입장하셨습니다.`,
+      message: this.buildJoinRoomMessage(
+        client.data.user.nickname,
+        room.status,
+        joinedPlayer?.role,
+      ),
     });
   }
 
@@ -319,6 +327,30 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     return updatedRoom; // 인터셉터에서 마스킹 후 클라이언트에게 전달
   }
 
+  @UseGuards(GameParticipantGuard, RoomMasterGuard)
+  @UseInterceptors(GameResponseInterceptor)
+  @SubscribeMessage(SocketEvent.RETURN_TO_WAITING)
+  handleReturnToWaiting(
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = client.data.user;
+    this.logger.log(
+      `[${SocketEvent.RETURN_TO_WAITING}] 유저 ${user.nickname}(${user.userId})가 로비 복귀 시도`,
+    );
+
+    const updatedRoom =
+      this.roomService.resetRoomToWaiting(user.userId);
+
+    this.server.to(updatedRoom.roomId).emit(
+      SocketEvent.ROOM_UPDATED,
+      {
+        message: '다음 게임 준비를 위해 로비 상태로 전환되었습니다.',
+      },
+    );
+
+    return updatedRoom;
+  }
+
   @UseGuards(GameParticipantGuard)
   @UseInterceptors(GameResponseInterceptor)
   @SubscribeMessage(SocketEvent.GET_GAME_STATE)
@@ -332,5 +364,27 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     );
 
     return this.gameService.getGameState(user.userId);
+  }
+
+  private buildJoinRoomMessage(
+    nickname: string,
+    status: GameRoom['status'],
+    role?: 'PLAYER' | 'SPECTATOR',
+  ): string {
+    if (
+      status === GameStatus.FINISHED &&
+      role === 'SPECTATOR'
+    ) {
+      return `${nickname}님이 게임이 종료된 방에 관전자로 입장하셨습니다.`;
+    }
+
+    if (
+      status === GameStatus.PLAYING &&
+      role === 'SPECTATOR'
+    ) {
+      return `${nickname}님이 진행 중인 게임에 관전자로 입장하셨습니다.`;
+    }
+
+    return `${nickname}님이 입장하셨습니다.`;
   }
 }

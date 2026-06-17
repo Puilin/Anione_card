@@ -7,6 +7,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { LogType } from 'src/shared/enums/log.enum';
 import { GameLog } from 'src/shared/interfaces/log.interface';
 import { TurnManagerService } from 'src/modules/game/turn-manager.service';
+import { LOBBY_STATE_ACTION_POLICY } from 'src/shared/constants/lobby-state-policy';
 
 @Injectable()
 export class RoomService {
@@ -87,13 +88,12 @@ export class RoomService {
       throw new WsException('User already in a room');
     }
 
-    const isPlaying = room.status === GameStatus.PLAYING;
-
     if (room.players.length >= this.MAX_CAPACITY) {
       throw new WsException('Room is full');
     }
 
-    const role: Player['role'] = isPlaying ? 'SPECTATOR' : 'PLAYER';
+    const policy = LOBBY_STATE_ACTION_POLICY[room.status];
+    const role: Player['role'] = policy.joinAs;
 
     const newPlayer: Player = {
       userId: user.userId,
@@ -193,9 +193,8 @@ export class RoomService {
       throw new WsException('Player not found in room');
     }
 
-    // 게임 중에는 변경 불가
-    if (room.status === GameStatus.PLAYING) {
-      throw new WsException('Cannot change ready state during game');
+    if (!LOBBY_STATE_ACTION_POLICY[room.status].canToggleReady) {
+      throw new WsException('Cannot change ready state outside waiting room');
     }
 
     // 방장은 항상 ready
@@ -210,6 +209,104 @@ export class RoomService {
 
     // 토글
     player.isReady = !player.isReady;
+
+    return room;
+  }
+
+  resetRoomToWaiting(userId: string): GameRoom {
+    const room = this.getRoomByUserId(userId);
+
+    if (room.hostId !== userId) {
+      throw new WsException('Only host can return room to waiting');
+    }
+
+    if (!LOBBY_STATE_ACTION_POLICY[room.status].canReturnToWaiting) {
+      throw new WsException('Room cannot return to waiting from current status');
+    }
+
+    room.attackStack = 0;
+    room.currentPower = 0;
+    room.lastCard = null;
+    room.drawPile = [];
+    room.discardPile = [];
+    room.lastActionId = 0;
+    room.turnOwner = null;
+    room.isBonusTurn = false;
+    room.direction = GameDirection.CLOCKWISE;
+    room.status = GameStatus.WAITING;
+    room.winnerId = null;
+    room.winReason = null;
+    room.players = room.players.map((player) => ({
+      ...player,
+      hand: [],
+      cardCount: 0,
+      isOut: false,
+      isReady:
+        player.role === 'PLAYER' &&
+        player.userId === room.hostId,
+    }));
+
+    this.pushLog(
+      room,
+      this.createSystemLog(
+        room,
+        userId,
+        LogType.NOTICE,
+        '다음 게임 준비를 위해 로비 상태로 전환되었습니다.',
+      ),
+    );
+
+    return room;
+  }
+
+  // TODO: ANI-38 Role 변경
+  changeRole(
+    userId: string,
+    nextRole: Player['role'],
+  ): GameRoom {
+    const room = this.getRoomByUserId(userId);
+
+    if (!LOBBY_STATE_ACTION_POLICY[room.status].canChangeRole) {
+      throw new WsException('Role can only be changed in waiting room');
+    }
+
+    if (room.hostId === userId) {
+      throw new WsException('Host cannot change role');
+    }
+
+    const player = room.players.find((candidate) => candidate.userId === userId);
+    if (!player) {
+      throw new WsException('Player not found in room');
+    }
+
+    if (player.role === nextRole) {
+      return room;
+    }
+
+    if (
+      nextRole === 'PLAYER' &&
+      room.players.filter((candidate) => candidate.role === 'PLAYER').length >= this.MAX_CAPACITY
+    ) {
+      throw new WsException('No player slot available');
+    }
+
+    player.role = nextRole;
+    player.isReady = false;
+    player.isOut = false;
+
+    return room;
+  }
+
+  private getRoomByUserId(userId: string): GameRoom {
+    const roomId = this.userToRoom.get(userId);
+    if (!roomId) {
+      throw new WsException('User is not in any room');
+    }
+
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      throw new WsException('Room not found');
+    }
 
     return room;
   }

@@ -20,6 +20,7 @@ import { TurnManagerService } from '../game/turn-manager.service';
 import { GameActionQueue } from '../game/actions/game-action-queue.interface';
 import { GameActionType } from 'src/shared/enums/game-action-type.enum';
 import { VictoryService } from '../game/victory.service';
+import { RoomMasterGuard } from 'src/common/guards/room-master.guard';
 
 describe('GameGateway', () => {
   let gateway: GameGateway;
@@ -429,6 +430,135 @@ describe('GameGateway', () => {
           message: 'winner님이 마지막 플레이어로 남아 승리했습니다.',
         },
       );
+    });
+  });
+
+  describe('handleJoinRoom', () => {
+    it('FINISHED 상태에 입장한 관전자에게 결과 관전 메시지를 브로드캐스트해야 한다', () => {
+      const client = {
+        data: {
+          user: {
+            userId: 'user-2',
+            nickname: 'guest',
+            isGuest: true,
+          },
+        },
+        join: jest.fn(),
+      } as unknown as Socket;
+
+      roomService.joinRoom.mockReturnValue({
+        roomId: 'room-1',
+        status: GameStatus.FINISHED,
+        players: [
+          {
+            userId: 'user-2',
+            nickname: 'guest',
+            isGuest: true,
+            hand: [],
+            cardCount: 0,
+            isReady: false,
+            isOut: false,
+            role: 'SPECTATOR',
+          },
+        ],
+      } as GameRoom);
+
+      const emit = jest.fn();
+      gateway.server = {
+        to: jest.fn().mockReturnValue({ emit }),
+      } as unknown as Server;
+
+      gateway.handleJoinRoom(client, { roomId: 'room-1' });
+
+      expect(emit).toHaveBeenCalledWith(
+        SocketEvent.ROOM_UPDATED,
+        {
+          message: 'guest님이 게임이 종료된 방에 관전자로 입장하셨습니다.',
+        },
+      );
+    });
+  });
+
+  describe('handleGameReady', () => {
+    it('FINISHED 상태에서는 gameReady 요청이 에러로 전파되어야 한다', () => {
+      const client = {
+        data: {
+          user: {
+            userId: 'user-1',
+            nickname: 'tester',
+            isGuest: false,
+          },
+        },
+      } as Socket;
+
+      roomService.toggleReady.mockImplementation(() => {
+        throw new WsException('Cannot change ready state outside waiting room');
+      });
+
+      expect(() => {
+        gateway.handleGameReady(client);
+      }).toThrow(WsException);
+    });
+  });
+
+  describe('handleReturnToWaiting', () => {
+    it('FINISHED 상태의 방을 WAITING으로 되돌리고 ROOM_UPDATED를 전송해야 한다', () => {
+      const client = {
+        data: {
+          user: {
+            userId: 'user-1',
+            nickname: 'tester',
+            isGuest: false,
+          },
+        },
+      } as Socket;
+
+      const updatedRoom = {
+        roomId: 'room-1',
+        status: GameStatus.WAITING,
+      } as GameRoom;
+
+      roomService.resetRoomToWaiting.mockReturnValue(updatedRoom);
+
+      const emit = jest.fn();
+      gateway.server = {
+        to: jest.fn().mockReturnValue({
+          emit,
+        }),
+      } as unknown as Server;
+
+      const result = gateway.handleReturnToWaiting(client);
+
+      expect(roomService.resetRoomToWaiting).toHaveBeenCalledWith('user-1');
+      expect(emit).toHaveBeenCalledWith(
+        SocketEvent.ROOM_UPDATED,
+        {
+          message: '다음 게임 준비를 위해 로비 상태로 전환되었습니다.',
+        },
+      );
+      expect(result).toBe(updatedRoom);
+    });
+
+    it('GameParticipantGuard와 RoomMasterGuard, GameResponseInterceptor가 적용되어야 한다', () => {
+      const handler = GameGateway.prototype.handleReturnToWaiting;
+
+      expect(
+        Reflect.getMetadata(MESSAGE_MAPPING_METADATA, handler),
+      ).toBe(true);
+      expect(
+        Reflect.getMetadata(MESSAGE_METADATA, handler),
+      ).toBe(SocketEvent.RETURN_TO_WAITING);
+      expect(
+        Reflect.getMetadata(GUARDS_METADATA, handler),
+      ).toEqual([
+        GameParticipantGuard,
+        RoomMasterGuard,
+      ]);
+      expect(
+        Reflect.getMetadata(INTERCEPTORS_METADATA, handler),
+      ).toEqual([
+        GameResponseInterceptor,
+      ]);
     });
   });
 });

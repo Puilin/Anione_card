@@ -7,6 +7,7 @@ export enum SocketEvent {
   LEAVE_ROOM = 'leaveRoom',
   GAME_READY = 'gameReady',
   GAME_START = 'gameStart',
+  RETURN_TO_WAITING = 'returnToWaiting',
   PLAY_CARD = 'playCard',
   DRAW_CARD = 'drawCard',
 
