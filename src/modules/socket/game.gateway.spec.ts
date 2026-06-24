@@ -448,7 +448,20 @@ describe('GameGateway', () => {
 
       roomService.joinRoom.mockReturnValue({
         roomId: 'room-1',
+        hostId: 'host-1',
+        attackStack: 0,
+        currentPower: 0,
+        lastCard: null,
+        drawPile: [],
+        discardPile: [],
+        lastActionId: 0,
+        turnOwner: null,
+        isBonusTurn: false,
+        direction: GameDirection.CLOCKWISE,
         status: GameStatus.FINISHED,
+        winnerId: 'host-1',
+        winReason: WinReason.EMPTY_HAND,
+        recentLogs: [],
         players: [
           {
             userId: 'user-2',
@@ -461,7 +474,7 @@ describe('GameGateway', () => {
             role: 'SPECTATOR',
           },
         ],
-      } as GameRoom);
+      });
 
       const emit = jest.fn();
       gateway.server = {

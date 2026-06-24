@@ -224,27 +224,8 @@ export class RoomService {
       throw new WsException('Room cannot return to waiting from current status');
     }
 
-    room.attackStack = 0;
-    room.currentPower = 0;
-    room.lastCard = null;
-    room.drawPile = [];
-    room.discardPile = [];
-    room.lastActionId = 0;
-    room.turnOwner = null;
-    room.isBonusTurn = false;
-    room.direction = GameDirection.CLOCKWISE;
-    room.status = GameStatus.WAITING;
-    room.winnerId = null;
-    room.winReason = null;
-    room.players = room.players.map((player) => ({
-      ...player,
-      hand: [],
-      cardCount: 0,
-      isOut: false,
-      isReady:
-        player.role === 'PLAYER' &&
-        player.userId === room.hostId,
-    }));
+    this.resetRoomStateForWaiting(room);
+    this.resetPlayersForWaiting(room);
 
     this.pushLog(
       room,
@@ -257,6 +238,33 @@ export class RoomService {
     );
 
     return room;
+  }
+
+  private resetRoomStateForWaiting(room: GameRoom): void {
+    room.attackStack = 0;
+    room.currentPower = 0;
+    room.lastCard = null;
+    room.drawPile = [];
+    room.discardPile = [];
+    room.lastActionId = 0;
+    room.turnOwner = null;
+    room.isBonusTurn = false;
+    room.direction = GameDirection.CLOCKWISE;
+    room.status = GameStatus.WAITING;
+    room.winnerId = null;
+    room.winReason = null;
+  }
+
+  private resetPlayersForWaiting(room: GameRoom): void {
+    room.players = room.players.map((player) => ({
+      ...player,
+      hand: [],
+      cardCount: 0,
+      isOut: false,
+      isReady:
+        player.role === 'PLAYER' &&
+        player.userId === room.hostId,
+    }));
   }
 
   private getRoomByUserId(userId: string): GameRoom {
