@@ -259,44 +259,6 @@ export class RoomService {
     return room;
   }
 
-  // TODO: ANI-38 Role 변경
-  changeRole(
-    userId: string,
-    nextRole: Player['role'],
-  ): GameRoom {
-    const room = this.getRoomByUserId(userId);
-
-    if (!LOBBY_STATE_ACTION_POLICY[room.status].canChangeRole) {
-      throw new WsException('Role can only be changed in waiting room');
-    }
-
-    if (room.hostId === userId) {
-      throw new WsException('Host cannot change role');
-    }
-
-    const player = room.players.find((candidate) => candidate.userId === userId);
-    if (!player) {
-      throw new WsException('Player not found in room');
-    }
-
-    if (player.role === nextRole) {
-      return room;
-    }
-
-    if (
-      nextRole === 'PLAYER' &&
-      room.players.filter((candidate) => candidate.role === 'PLAYER').length >= this.MAX_CAPACITY
-    ) {
-      throw new WsException('No player slot available');
-    }
-
-    player.role = nextRole;
-    player.isReady = false;
-    player.isOut = false;
-
-    return room;
-  }
-
   private getRoomByUserId(userId: string): GameRoom {
     const roomId = this.userToRoom.get(userId);
     if (!roomId) {
