@@ -1,6 +1,6 @@
 import { GameRoom } from 'src/shared/interfaces/game.interface';
 import { RoomService } from './room.service';
-import { GameDirection } from 'src/shared/enums/game.enum';
+import { GameDirection, GameStatus } from 'src/shared/enums/game.enum';
 import { WsException } from '@nestjs/websockets';
 import { v4 as uuidv4 } from 'uuid';
 import { TurnManagerService } from 'src/modules/game/turn-manager.service';
@@ -112,6 +112,18 @@ describe('RoomService', () => {
       const joinedPlayer = updatedRoom.players.find(p => p.userId === guest.userId);
 
       expect(joinedPlayer?.role).toBe('SPECTATOR');
+    });
+
+    it('게임 종료 후 방에 입장하면 관전자가 되어야 한다', () => {
+      room.status = 'FINISHED';
+
+      const guest = mockUser();
+      const updatedRoom = service.joinRoom(room.roomId, guest);
+
+      const joinedPlayer = updatedRoom.players.find(p => p.userId === guest.userId);
+
+      expect(joinedPlayer?.role).toBe('SPECTATOR');
+      expect(joinedPlayer?.isReady).toBe(false);
     });
 
     it('같은 방에 중복 입장할 수 없다', () => {
@@ -311,12 +323,112 @@ describe('RoomService', () => {
       }).toThrow(WsException);
     });
 
+    it('게임 종료 상태에서도 준비 상태를 변경할 수 없어야 한다', () => {
+      const guest = mockUser();
+      service.joinRoom(room.roomId, guest);
+
+      room.status = 'FINISHED';
+
+      expect(() => {
+        service.toggleReady(guest.userId);
+      }).toThrow(WsException);
+    });
+
     it('존재하지 않는 유저는 에러가 발생해야 한다', () => {
       expect(() => {
         service.toggleReady('invalid-user');
       }).toThrow(WsException);
     });
   });
+
+  describe('resetRoomToWaiting', () => {
+    it('FINISHED 상태의 방을 WAITING으로 초기화해야 한다', () => {
+      const host = mockUser();
+      const guest = mockUser();
+      const spectator = mockUser();
+      const room = service.createRoom(host);
+
+      service.joinRoom(room.roomId, guest);
+      room.status = GameStatus.FINISHED;
+      room.attackStack = 5;
+      room.currentPower = 3;
+      room.lastActionId = 9;
+      room.turnOwner = guest.userId;
+      room.isBonusTurn = true;
+      room.direction = GameDirection.COUNTER_CLOCKWISE;
+      room.winnerId = guest.userId;
+      room.winReason = 'EMPTY_HAND' as any;
+      room.lastCard = {
+        id: uuidv4(),
+        suit: 'DOG' as any,
+        declaredSuit: 'DOG' as any,
+        type: 'NUMBER' as any,
+        value: '1',
+        power: 0,
+        assetKey: 'dog_1',
+      };
+      room.drawPile = [room.lastCard];
+      room.discardPile = [room.lastCard];
+      room.players.find((player) => player.userId === guest.userId)!.isReady = true;
+      room.players.find((player) => player.userId === guest.userId)!.isOut = true;
+      service.joinRoom(room.roomId, spectator);
+
+      const updatedRoom = service.resetRoomToWaiting(host.userId);
+
+      expect(updatedRoom.status).toBe(GameStatus.WAITING);
+      expect(updatedRoom.attackStack).toBe(0);
+      expect(updatedRoom.currentPower).toBe(0);
+      expect(updatedRoom.lastCard).toBeNull();
+      expect(updatedRoom.drawPile).toEqual([]);
+      expect(updatedRoom.discardPile).toEqual([]);
+      expect(updatedRoom.lastActionId).toBe(0);
+      expect(updatedRoom.turnOwner).toBeNull();
+      expect(updatedRoom.isBonusTurn).toBe(false);
+      expect(updatedRoom.direction).toBe(GameDirection.CLOCKWISE);
+      expect(updatedRoom.winnerId).toBeNull();
+      expect(updatedRoom.winReason).toBeNull();
+
+      const hostPlayer = updatedRoom.players.find((player) => player.userId === host.userId);
+      const guestPlayer = updatedRoom.players.find((player) => player.userId === guest.userId);
+      const spectatorPlayer = updatedRoom.players.find((player) => player.userId === spectator.userId);
+
+      expect(hostPlayer).toMatchObject({ role: 'PLAYER', isReady: true, isOut: false, hand: [], cardCount: 0 });
+      expect(guestPlayer).toMatchObject({ role: 'PLAYER', isReady: false, isOut: false, hand: [], cardCount: 0 });
+      expect(spectatorPlayer).toMatchObject({ role: 'SPECTATOR', isReady: false, isOut: false, hand: [], cardCount: 0 });
+      expect(updatedRoom.recentLogs.at(-1)?.payload).toMatchObject({
+        message: '다음 게임 준비를 위해 로비 상태로 전환되었습니다.',
+      });
+    });
+
+    it('FINISHED가 아니면 WAITING으로 되돌릴 수 없어야 한다', () => {
+      const host = mockUser();
+      const room = service.createRoom(host);
+
+      expect(() => {
+        service.resetRoomToWaiting(host.userId);
+      }).toThrow(WsException);
+
+      room.status = GameStatus.PLAYING;
+
+      expect(() => {
+        service.resetRoomToWaiting(host.userId);
+      }).toThrow(WsException);
+    });
+
+    it('host가 아니면 WAITING으로 되돌릴 수 없어야 한다', () => {
+      const host = mockUser();
+      const guest = mockUser();
+      const room = service.createRoom(host);
+
+      service.joinRoom(room.roomId, guest);
+      room.status = GameStatus.FINISHED;
+
+      expect(() => {
+        service.resetRoomToWaiting(guest.userId);
+      }).toThrow(WsException);
+    });
+  });
+
 });
 
 function mockUser() {
