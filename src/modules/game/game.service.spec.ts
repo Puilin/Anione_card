@@ -596,8 +596,19 @@ describe('GameService (Unit)', () => {
         value: 'BONUS',
         suit: CardSuit.RABBIT,
       });
+      const extraCard = createMockCard({
+        id: uuidv4(),
+        type: CardType.NUMBER,
+        value: '4',
+        suit: CardSuit.CAT,
+      });
 
-      setHostCardForPlay(bonusCard);
+      const hostPlayer = room.players.find(
+        p => p.userId === host.userId,
+      )!;
+      room.turnOwner = host.userId;
+      hostPlayer.hand = [bonusCard, extraCard];
+      hostPlayer.cardCount = 2;
       turnManager.applyTurnEffect.mockImplementation(
         ({ room: targetRoom, playerId }) => {
           targetRoom.turnOwner = playerId;
@@ -610,6 +621,76 @@ describe('GameService (Unit)', () => {
 
       expect(room.turnOwner).toBe(host.userId);
       expect(room.isBonusTurn).toBe(true);
+    });
+
+    it('마지막 hand 가 BONUS 카드면 승리하지 않고 1장을 자동 드로우해야 한다', () => {
+      const bonusCard = createMockCard({
+        id: uuidv4(),
+        type: CardType.SPECIAL,
+        value: 'BONUS',
+        suit: CardSuit.RABBIT,
+      });
+      const autoDrawCard = createMockCard({
+        id: uuidv4(),
+        type: CardType.NUMBER,
+        value: '8',
+        suit: CardSuit.CAT,
+      });
+
+      room.drawPile = [autoDrawCard];
+      setHostCardForPlay(bonusCard);
+      turnManager.resolveTurnAfterDraw.mockImplementation(
+        ({ room: targetRoom }) => {
+          targetRoom.turnOwner = guest.userId;
+          return guest.userId;
+        },
+      );
+
+      service.playCard(host.userId, bonusCard.id);
+
+      const updatedHost = room.players.find(
+        (player) => player.userId === host.userId,
+      )!;
+
+      expect(victoryService.determineWinner).not.toHaveBeenCalled();
+      expect(updatedHost.hand).toEqual([autoDrawCard]);
+      expect(updatedHost.cardCount).toBe(1);
+      expect(room.status).toBe(GameStatus.PLAYING);
+      expect(room.winnerId).toBeNull();
+      expect(room.turnOwner).toBe(guest.userId);
+      expect(room.isBonusTurn).toBe(false);
+      expect(turnManager.resolveTurnAfterDraw).toHaveBeenCalledWith(
+        expect.objectContaining({
+          room,
+          player: expect.objectContaining({
+            userId: host.userId,
+            hand: [autoDrawCard],
+            cardCount: 1,
+          }),
+        }),
+      );
+      expect(turnManager.applyTurnEffect).not.toHaveBeenCalled();
+      expect(roomService.pushLog).toHaveBeenNthCalledWith(
+        1,
+        room,
+        expect.objectContaining({
+          type: LogType.BONUS,
+          actorId: host.userId,
+          cardId: bonusCard.id,
+        }),
+      );
+      expect(roomService.pushLog).toHaveBeenNthCalledWith(
+        2,
+        room,
+        expect.objectContaining({
+          type: LogType.DRAW,
+          actorId: host.userId,
+          cardId: autoDrawCard.id,
+          payload: expect.objectContaining({
+            drawCount: 1,
+          }),
+        }),
+      );
     });
 
     it('REVERSE 카드면 진행 방향을 반전해야 한다', () => {
@@ -781,6 +862,18 @@ describe('GameService (Unit)', () => {
           }),
         }),
       );
+    });
+
+    it('BONUS 상태에서 드로우하면 bonusTurn을 해제하고 턴을 넘겨야 한다', () => {
+      room.isBonusTurn = true;
+
+      const updatedRoom = service.drawCard(
+        host.userId,
+        room.roomId,
+      );
+
+      expect(updatedRoom.isBonusTurn).toBe(false);
+      expect(updatedRoom.turnOwner).toBe(guest.userId);
     });
 
     it('요청 roomId가 서버 세션의 roomId와 다르면 예외가 발생해야 한다', () => {

@@ -184,12 +184,20 @@ export class GameService {
     player.cardCount = player.hand.length;
 
     this.pushToDiscardPile(room, card);
-    const victory =
-      this.victoryService.determineWinner({
+    const autoDrawnCards =
+      this.handleBonusLastCardPolicy(
         room,
-        trigger: VictoryTrigger.CARD_PLAYED,
-        actorId: player.userId,
-      });
+        player,
+        card,
+      );
+    const victory =
+      autoDrawnCards.length === 0
+        ? this.victoryService.determineWinner({
+          room,
+          trigger: VictoryTrigger.CARD_PLAYED,
+          actorId: player.userId,
+        })
+        : null;
 
     if (victory) {
       this.finishGame(room, victory);
@@ -197,17 +205,58 @@ export class GameService {
     }
 
     this.applyCardStateEffect(room, card);
-    this.turnManager.applyTurnEffect({
-      room,
-      playerId: player.userId,
-      effect: this.resolveTurnEffect(
+    if (autoDrawnCards.length === 0) {
+      this.turnManager.applyTurnEffect({
         room,
-        card,
-      ),
-    });
+        playerId: player.userId,
+        effect: this.resolveTurnEffect(
+          room,
+          card,
+        ),
+      });
+    }
     this.pushPlayCardLog(room, player, card);
+    if (autoDrawnCards.length > 0) {
+      this.pushDrawCardLog(
+        room,
+        player,
+        autoDrawnCards[
+          autoDrawnCards.length - 1
+        ],
+        autoDrawnCards.length,
+      );
+    }
 
     return room;
+  }
+
+  private handleBonusLastCardPolicy(
+    room: GameRoom,
+    player: Player,
+    card: Card,
+  ): Card[] {
+    const isBonusLastCard =
+      card.type === CardType.SPECIAL &&
+      card.value === 'BONUS' &&
+      player.hand.length === 0;
+
+    if (!isBonusLastCard) {
+      return [];
+    }
+
+    const drawnCards =
+      this.performDraw(
+        room,
+        player,
+        {
+          actorId: player.userId,
+          drawCount: 1,
+          shouldAdvanceTurn: true,
+          shouldClearBonusTurn: true,
+        },
+      );
+
+    return drawnCards;
   }
 
   drawCard(
@@ -227,25 +276,23 @@ export class GameService {
       ? room.attackStack
       : 1;
     const drawnCards =
-      this.drawCardsFromPile(
+      this.performDraw(
         room,
-        userId,
-        drawCount,
+        player,
+        {
+          actorId: userId,
+          drawCount,
+          shouldAdvanceTurn: true,
+          shouldClearBonusTurn:
+            isPenaltyDraw ||
+            room.isBonusTurn,
+        },
       );
-
-    player.hand.push(...drawnCards);
-    player.cardCount = player.hand.length;
 
     if (isPenaltyDraw) {
       room.attackStack = 0;
       room.currentPower = 0;
-      room.isBonusTurn = false;
     }
-
-    this.turnManager.resolveTurnAfterDraw({
-      room,
-      player,
-    });
     this.pushDrawCardLog(
       room,
       player,
@@ -254,6 +301,40 @@ export class GameService {
     );
 
     return room;
+  }
+
+  private performDraw(
+    room: GameRoom,
+    player: Player,
+    options: {
+      actorId: string;
+      drawCount: number;
+      shouldAdvanceTurn: boolean;
+      shouldClearBonusTurn: boolean;
+    },
+  ): Card[] {
+    const drawnCards =
+      this.drawCardsFromPile(
+        room,
+        options.actorId,
+        options.drawCount,
+      );
+
+    player.hand.push(...drawnCards);
+    player.cardCount = player.hand.length;
+
+    if (options.shouldClearBonusTurn) {
+      room.isBonusTurn = false;
+    }
+
+    if (options.shouldAdvanceTurn) {
+      this.turnManager.resolveTurnAfterDraw({
+        room,
+        player,
+      });
+    }
+
+    return drawnCards;
   }
 
   private drawCardsFromPile(
