@@ -11,6 +11,7 @@ import {
 export class CardResponseDto {
   @Expose() id!: string;
   @Expose() suit!: CardSuit;
+  @Expose() declaredSuit!: CardSuit;
   @Expose() type!: CardType;
   @Expose() value!: string;
   @Expose() power!: number;
@@ -23,6 +24,9 @@ export class PlayerResponseDto {
   @Expose() nickname!: string;
   @Expose() role!: 'PLAYER' | 'SPECTATOR';
   @Expose() cardCount!: number;
+  @Expose() isReady!: boolean;
+  @Expose() isConnected!: boolean;
+  @Expose() disconnectedAt!: number | null;
   @Expose() isOut!: boolean;
   
   @Expose()
@@ -33,10 +37,12 @@ export class PlayerResponseDto {
 @Exclude()
 export class GameRoomResponseDto {
   @Expose() roomId!: string;
+  @Expose() hostId!: string;
   @Expose() turnOwner!: string | null;
   @Expose() isBonusTurn!: boolean;
   @Expose() direction!: GameDirection;
   @Expose() attackStack!: number;
+  @Expose() currentPower!: number;
   @Expose() status!: GameStatus;
   @Expose() winnerId!: string | null;
   @Expose() winReason!: WinReason | null;

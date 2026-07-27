@@ -156,6 +156,7 @@ function createPlayer(userId: string): Player {
     hand: [],
     cardCount: 0,
     isReady: true,
+    isConnected: true,
     isOut: false,
     role: 'PLAYER',
   };

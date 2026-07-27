@@ -76,6 +76,55 @@ describe('GameRoomResponseDto', () => {
     expect(serialized.lastActionId).toBe(7);
   });
 
+  it('Snapshot 복구 필드는 직렬화 시 포함되어야 한다', () => {
+    const room: GameRoom = {
+      roomId: 'room-1',
+      hostId: 'host-1',
+      attackStack: 4,
+      currentPower: 2,
+      lastCard: createMockCard({
+        suit: CardSuit.BEAR,
+        declaredSuit: CardSuit.CAT,
+      }),
+      drawPile: [],
+      discardPile: [],
+      lastActionId: 7,
+      turnOwner: 'me',
+      isBonusTurn: false,
+      direction: GameDirection.CLOCKWISE,
+      status: GameStatus.PLAYING,
+      winnerId: null,
+      winReason: null,
+      recentLogs: [],
+      players: [
+        {
+          userId: 'me',
+          nickname: 'me',
+          isGuest: false,
+          hand: [createMockCard()],
+          cardCount: 1,
+          isReady: true,
+          isConnected: false,
+          disconnectedAt: 1234567890,
+          isOut: false,
+          role: 'PLAYER',
+        },
+      ],
+    };
+
+    const dto = plainToInstance(GameRoomResponseDto, room, {
+      excludeExtraneousValues: true,
+    });
+    const serialized = JSON.parse(JSON.stringify(dto));
+
+    expect(serialized.hostId).toBe('host-1');
+    expect(serialized.currentPower).toBe(2);
+    expect(serialized.lastCard.declaredSuit).toBe(CardSuit.CAT);
+    expect(serialized.players[0].isReady).toBe(true);
+    expect(serialized.players[0].isConnected).toBe(false);
+    expect(serialized.players[0].disconnectedAt).toBe(1234567890);
+  });
+
   it('게임 종료 정보는 직렬화 시 포함되어야 한다', () => {
     const room: GameRoom = {
       roomId: 'room-1',

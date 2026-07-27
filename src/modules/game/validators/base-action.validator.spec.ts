@@ -49,6 +49,7 @@ describe('BaseActionValidator', () => {
     isOut: false,
     cardCount: 1,
     isReady: true,
+    isConnected: true,
     hand: [createMockCard()],
     ...overrides,
   });

@@ -45,6 +45,7 @@ describe('NormalCardValidator', () => {
     isGuest: false,
     isOut: false,
     isReady: true,
+    isConnected: true,
     cardCount: 1,
     hand: [createMockCard()],
     ...overrides,
