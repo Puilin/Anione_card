@@ -39,6 +39,7 @@ describe('MaskingService', () => {
           cardCount: 7,
           isReady: true,
           isConnected: true,
+          disconnectedAt: null,
           isOut: false,
           role: 'PLAYER',
         },
@@ -50,6 +51,7 @@ describe('MaskingService', () => {
           cardCount: 7,
           isReady: true,
           isConnected: true,
+          disconnectedAt: null,
           isOut: false,
           role: 'PLAYER',
         },
@@ -94,7 +96,7 @@ describe('MaskingService', () => {
     // 관전자 추가
     room.players.push({
       userId: 'spec', nickname: 'spec', isGuest: true,
-      hand: [], cardCount: 0, isReady: false, isConnected: true, isOut: false, role: 'SPECTATOR',
+      hand: [], cardCount: 0, isReady: false, isConnected: true, disconnectedAt: null, isOut: false, role: 'SPECTATOR',
     });
 
     const result = service.maskRoomForUser(room, 'spec');
@@ -118,6 +120,7 @@ describe('MaskingService', () => {
       cardCount: 7,
       isReady: false,
       isConnected: true,
+      disconnectedAt: null,
       isOut: false,
       role: 'SPECTATOR',
     });
