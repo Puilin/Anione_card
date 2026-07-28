@@ -1180,6 +1180,7 @@ function createPlayer(user: ReturnType<typeof mockUser>, isReady = false): Playe
     cardCount: 0,
     isReady,
     isConnected: true,
+    disconnectedAt: null,
     isOut: false,
     role: 'PLAYER',
   };
@@ -1192,6 +1193,7 @@ function createSpectator(user: ReturnType<typeof mockUser>): Player {
     cardCount: 0,
     isReady: false,
     isConnected: true,
+    disconnectedAt: null,
     isOut: false,
     role: 'SPECTATOR',
   };

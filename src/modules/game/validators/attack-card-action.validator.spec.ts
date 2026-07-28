@@ -47,6 +47,7 @@ describe('AttackCardValidator', () => {
     isOut: false,
     isReady: true,
     isConnected: true,
+    disconnectedAt: null,
     cardCount: 1,
     hand: [createMockCard()],
     ...overrides,

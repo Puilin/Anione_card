@@ -105,6 +105,7 @@ describe('GameSetupService', () => {
       hand: [],
       isReady: true,
       isConnected: true,
+      disconnectedAt: null,
       isOut: false,
       role: 'PLAYER',
     });

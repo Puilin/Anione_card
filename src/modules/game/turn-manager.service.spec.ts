@@ -433,6 +433,7 @@ function createPlayer(
     cardCount: 0,
     isReady: true,
     isConnected: true,
+    disconnectedAt: null,
     isOut: false,
     role: 'PLAYER',
     ...overrides,
