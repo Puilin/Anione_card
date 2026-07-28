@@ -24,6 +24,8 @@ export interface Player {
   hand: Card[]; // 개인에게 보여지는 카드덱 (서버에서 마스킹)
   cardCount: number; // 현재 들고 있는 카드의 개수 (공유가능)
   isReady: boolean;
+  isConnected: boolean;
+  disconnectedAt: number | null;
   isOut: boolean;
   role: 'PLAYER' | 'SPECTATOR';
 }

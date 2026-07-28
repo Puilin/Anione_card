@@ -49,6 +49,8 @@ export const SocketValidationConfig = new ValidationPipe({
 export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server!: Server;
   private logger: Logger = new Logger('GameGateway');
+  private readonly disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly DISCONNECT_GRACE_MS = 30_000;
 
   constructor(
     private readonly authService: AuthService,
@@ -107,6 +109,8 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   handleLeaveRoom(
     @ConnectedSocket() client: Socket,
   ) {
+    this.clearDisconnectTimeout(client.data.user.userId);
+
     const { room, roomId, isDeleted } = this.roomService.leaveRoom(client.data.user.userId);
     const victory = room
       ? this.victoryService.determineWinner({
@@ -276,16 +280,16 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       return;
     }
 
-    // TODO (ANI-15): 재접속 시 세션 복구를 지원할 수 있도록 disconnect와 명시적 leaveRoom 처리를 분리할 예정
-    const { room, roomId, isDeleted } = this.roomService.leaveRoom(user.userId);
+    const room = this.roomService.markDisconnected(user.userId);
+    this.scheduleDisconnectTimeout(user.userId);
 
     this.logger.log(`User Disconnected: ${user.nickname} (${user.userId})`);
     this.logger.log(`접속 해제: ${client.id}`);
 
-    if (roomId) {
-      this.server.to(roomId).emit(SocketEvent.ROOM_UPDATED, {
+    if (room) {
+      this.server.to(room.roomId).emit(SocketEvent.ROOM_UPDATED, {
         room,
-        message: `${user.nickname}님이 연결 해제되었습니다. ${isDeleted ? '방이 삭제되었습니다.' : ''}`,
+        message: `${user.nickname}님이 연결 해제되었습니다. ${this.DISCONNECT_GRACE_MS / 1000}초 내에 복귀하지 않으면 방에서 퇴장 처리됩니다.`,
       });
     }
 
@@ -364,6 +368,73 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     );
 
     return this.gameService.getGameState(user.userId);
+  }
+
+  private scheduleDisconnectTimeout(userId: string): void {
+    this.clearDisconnectTimeout(userId);
+
+    const timer = setTimeout(() => {
+      this.handleDisconnectTimeout(userId);
+    }, this.DISCONNECT_GRACE_MS);
+
+    this.disconnectTimers.set(userId, timer);
+  }
+
+  private clearDisconnectTimeout(userId: string): void {
+    const timer = this.disconnectTimers.get(userId);
+    if (!timer) {
+      return;
+    }
+
+    clearTimeout(timer);
+    this.disconnectTimers.delete(userId);
+  }
+
+  private handleDisconnectTimeout(userId: string): void {
+    this.clearDisconnectTimeout(userId);
+
+    const roomBeforeLeave = this.roomService.getUserRoom(userId);
+    if (!roomBeforeLeave) {
+      return;
+    }
+
+    const roomSnapshot = this.roomService.getRoom(roomBeforeLeave);
+    const player =
+      roomSnapshot?.players.find((candidate) => candidate.userId === userId);
+
+    if (!roomSnapshot || !player || player.isConnected) {
+      return;
+    }
+
+    const { room, roomId, isDeleted } = this.roomService.leaveRoom(userId);
+    const victory = room
+      ? this.victoryService.determineWinner({
+          room,
+          trigger: VictoryTrigger.PLAYER_LEFT,
+          actorId: userId,
+        })
+      : null;
+
+    if (room && victory) {
+      this.gameService.finishGame(room, victory);
+    }
+
+    if (!roomId) {
+      return;
+    }
+
+    this.server.to(roomId).emit(SocketEvent.ROOM_UPDATED, {
+      room,
+      message: `${player.nickname}님이 복귀하지 않아 방에서 퇴장 처리되었습니다.${isDeleted ? ' 방이 삭제되었습니다.' : ''}`,
+    });
+
+    if (room && victory) {
+      this.server.to(roomId).emit(SocketEvent.GAME_OVER, {
+        winnerId: room.winnerId,
+        winReason: room.winReason,
+        message: `${victory.winner.nickname}님이 마지막 플레이어로 남아 승리했습니다.`,
+      });
+    }
   }
 
   private buildJoinRoomMessage(

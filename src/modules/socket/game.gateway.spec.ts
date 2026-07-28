@@ -401,6 +401,8 @@ describe('GameGateway', () => {
           hand: [],
           cardCount: 0,
           isReady: true,
+          isConnected: true,
+          disconnectedAt: null,
           isOut: false,
           role: 'PLAYER',
         },
@@ -470,6 +472,8 @@ describe('GameGateway', () => {
             hand: [],
             cardCount: 0,
             isReady: false,
+            isConnected: true,
+            disconnectedAt: null,
             isOut: false,
             role: 'SPECTATOR',
           },
@@ -586,6 +590,8 @@ describe('GameGateway disconnect cleanup', () => {
   let gameActionQueue: jest.Mocked<GameActionQueue>;
 
   beforeEach(() => {
+    jest.useFakeTimers();
+
     authService = createMock<AuthService>();
     gameService = createMock<GameService>();
     turnManager = createMock<TurnManagerService>();
@@ -608,7 +614,12 @@ describe('GameGateway disconnect cleanup', () => {
     } as unknown as Server;
   });
 
-  it('disconnect 시 players 목록에서 제거되어야 한다', () => {
+  afterEach(() => {
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
+  });
+
+  it('disconnect 시 players 목록에서 제거되지 않아야 한다', () => {
     const host = mockUser(false);
     const guest = mockUser();
     const room = roomService.createRoom(host);
@@ -617,10 +628,10 @@ describe('GameGateway disconnect cleanup', () => {
     gateway.handleDisconnect(createClient(guest));
 
     const updatedRoom = roomService.getRoom(room.roomId);
-    expect(updatedRoom?.players.some((player) => player.userId === guest.userId)).toBe(false);
+    expect(updatedRoom?.players.some((player) => player.userId === guest.userId)).toBe(true);
   });
 
-  it('disconnect 시 userToRoom 인덱스가 제거되어야 한다', () => {
+  it('disconnect 시 userToRoom 인덱스가 유지되어야 한다', () => {
     const host = mockUser(false);
     const guest = mockUser();
     const room = roomService.createRoom(host);
@@ -628,67 +639,58 @@ describe('GameGateway disconnect cleanup', () => {
 
     gateway.handleDisconnect(createClient(guest));
 
-    expect(roomService.getUserRoom(guest.userId)).toBeUndefined();
+    expect(roomService.getUserRoom(guest.userId)).toBe(room.roomId);
   });
 
-  it('방장 disconnect 시 host가 다른 플레이어에게 이관되어야 한다', () => {
+  it('disconnect 시 isConnected만 false가 되어야 한다', () => {
     const host = mockUser(false);
     const guest = mockUser();
     const room = roomService.createRoom(host);
     roomService.joinRoom(room.roomId, guest);
 
-    gateway.handleDisconnect(createClient(host));
+    gateway.handleDisconnect(createClient(guest));
 
     const updatedRoom = roomService.getRoom(room.roomId);
-    expect(updatedRoom?.hostId).toBe(guest.userId);
+    expect(updatedRoom?.players.find((player) => player.userId === guest.userId)?.isConnected).toBe(false);
   });
 
-  it('턴 오너 disconnect 시 다음 턴 유저에게 턴이 넘어가야 한다', () => {
+  it('disconnect 시 hand와 room이 유지되어야 한다', () => {
     const host = mockUser(false);
-    const guest1 = mockUser();
-    const guest2 = mockUser();
+    const guest = mockUser();
     const room = roomService.createRoom(host);
+    const updatedRoom = roomService.joinRoom(room.roomId, guest);
+    const joinedPlayer = updatedRoom.players.find((player) => player.userId === guest.userId)!;
+    joinedPlayer.hand = [{
+      id: uuidv4(),
+      suit: CardSuit.RABBIT,
+      declaredSuit: CardSuit.RABBIT,
+      type: CardType.NUMBER,
+      power: 0,
+      value: '1',
+      assetKey: 'rabbit_1',
+    }];
+    joinedPlayer.cardCount = 1;
 
-    turnManager.resolveTurnAfterLeave.mockReturnValue(
-      guest1.userId,
-    );
+    gateway.handleDisconnect(createClient(guest));
 
-    roomService.joinRoom(room.roomId, guest1);
-    roomService.joinRoom(room.roomId, guest2);
+    const roomAfterDisconnect = roomService.getRoom(room.roomId);
+    expect(roomAfterDisconnect?.roomId).toBe(room.roomId);
+    expect(roomAfterDisconnect?.players.find((player) => player.userId === guest.userId)?.hand).toHaveLength(1);
+  });
 
+  it('disconnect 직후에는 방장 위임이나 턴 이동이 일어나지 않아야 한다', () => {
+    const host = mockUser(false);
+    const guest = mockUser();
+    const room = roomService.createRoom(host);
+    roomService.joinRoom(room.roomId, guest);
     room.status = 'PLAYING';
-    room.direction = GameDirection.CLOCKWISE;
     room.turnOwner = host.userId;
 
     gateway.handleDisconnect(createClient(host));
 
     const updatedRoom = roomService.getRoom(room.roomId);
-    expect(updatedRoom?.turnOwner).toBe(guest1.userId);
-  });
-
-  it('마지막 유저 disconnect 시 방이 삭제되어야 한다', () => {
-    const host = mockUser(false);
-    const room = roomService.createRoom(host);
-
-    gateway.handleDisconnect(createClient(host));
-
-    expect(roomService.getRoom(room.roomId)).toBeUndefined();
-  });
-
-  it('disconnect 후 재접속 시 already in a room 오류 없이 다시 입장할 수 있어야 한다', () => {
-    const host = mockUser(false);
-    const guest = mockUser();
-    const room = roomService.createRoom(host);
-
-    roomService.joinRoom(room.roomId, guest);
-    gateway.handleDisconnect(createClient(guest));
-
-    expect(() => {
-      roomService.joinRoom(room.roomId, guest);
-    }).not.toThrow(WsException);
-
-    const updatedRoom = roomService.getRoom(room.roomId);
-    expect(updatedRoom?.players.some((player) => player.userId === guest.userId)).toBe(true);
+    expect(updatedRoom?.hostId).toBe(host.userId);
+    expect(updatedRoom?.turnOwner).toBe(host.userId);
   });
 
   it('disconnect에서는 승리 판정을 시도하지 않아야 한다', () => {
@@ -700,6 +702,58 @@ describe('GameGateway disconnect cleanup', () => {
     gateway.handleDisconnect(createClient(guest));
 
     expect(victoryService.determineWinner).not.toHaveBeenCalled();
+  });
+
+  it('유예시간이 지나도 복귀하지 않으면 실제 leaveRoom과 승리 판정을 수행해야 한다', () => {
+    const host = mockUser(false);
+    const guest = mockUser();
+    const room = roomService.createRoom(host);
+    const emit = jest.fn();
+
+    gateway.server = {
+      to: jest.fn().mockReturnValue({
+        emit,
+      }),
+    } as unknown as Server;
+
+    roomService.joinRoom(room.roomId, guest);
+    gateway.handleDisconnect(createClient(guest));
+
+    jest.advanceTimersByTime(30_000);
+
+    expect(roomService.getUserRoom(guest.userId)).toBeUndefined();
+    expect(victoryService.determineWinner).toHaveBeenCalledWith({
+      room: expect.any(Object),
+      trigger: 'PLAYER_LEFT',
+      actorId: guest.userId,
+    });
+    expect(gameService.finishGame).toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith(
+      SocketEvent.GAME_OVER,
+      expect.objectContaining({
+        winnerId: room.winnerId,
+      }),
+    );
+  });
+
+  it('disconnect timeout이 이미 삭제된 방에서도 안전하게 종료되어야 한다', () => {
+    const host = mockUser(false);
+    const guest = mockUser();
+    const room = roomService.createRoom(host);
+
+    roomService.joinRoom(room.roomId, guest);
+    gateway.handleDisconnect(createClient(guest));
+
+    roomService.leaveRoom(guest.userId);
+    roomService.leaveRoom(host.userId);
+
+    expect(() => {
+      jest.advanceTimersByTime(30_000);
+    }).not.toThrow();
+
+    expect(victoryService.determineWinner).not.toHaveBeenCalled();
+    expect(gameService.finishGame).not.toHaveBeenCalled();
+    expect(roomService.getRoom(room.roomId)).toBeUndefined();
   });
 });
 

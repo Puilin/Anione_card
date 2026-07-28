@@ -59,6 +59,7 @@ describe('RoomService', () => {
       expect(room.players[0]).toMatchObject({
         userId: host.userId,
         isReady: true,
+        isConnected: true,
         role: 'PLAYER',
         hand: [],
         cardCount: 0,
@@ -89,6 +90,7 @@ describe('RoomService', () => {
         hand: [],
         cardCount: 0,
         isReady: false,
+        isConnected: true,
         role: 'PLAYER',
       });
 
@@ -257,6 +259,45 @@ describe('RoomService', () => {
     });
   });
 
+  describe('markDisconnected', () => {
+    let host: ReturnType<typeof mockUser>;
+    let room: GameRoom;
+
+    beforeEach(() => {
+      host = mockUser();
+      room = service.createRoom(host);
+    });
+
+    it('disconnect 시 player와 hand와 room은 유지하고 isConnected만 false로 바꿔야 한다', () => {
+      const guest = mockUser();
+      const updatedRoom = service.joinRoom(room.roomId, guest);
+      const joinedPlayer = updatedRoom.players.find((player) => player.userId === guest.userId)!;
+
+      joinedPlayer.hand = [{
+        id: uuidv4(),
+        suit: 'DOG' as any,
+        declaredSuit: 'DOG' as any,
+        type: 'NUMBER' as any,
+        value: '1',
+        power: 0,
+        assetKey: 'dog_1',
+      }];
+      joinedPlayer.cardCount = 1;
+
+      const roomAfterDisconnect = service.markDisconnected(guest.userId);
+
+      expect(roomAfterDisconnect?.roomId).toBe(room.roomId);
+      expect(service.getUserRoom(guest.userId)).toBe(room.roomId);
+      expect(roomAfterDisconnect?.players.some((player) => player.userId === guest.userId)).toBe(true);
+      expect(roomAfterDisconnect?.players.find((player) => player.userId === guest.userId)).toMatchObject({
+        isConnected: false,
+        disconnectedAt: expect.any(Number),
+        cardCount: 1,
+      });
+      expect(roomAfterDisconnect?.players.find((player) => player.userId === guest.userId)?.hand).toHaveLength(1);
+    });
+  });
+
   describe('toggleReady', () => {
     let host: ReturnType<typeof mockUser>;
     let room: GameRoom;
@@ -392,9 +433,9 @@ describe('RoomService', () => {
       const guestPlayer = updatedRoom.players.find((player) => player.userId === guest.userId);
       const spectatorPlayer = updatedRoom.players.find((player) => player.userId === spectator.userId);
 
-      expect(hostPlayer).toMatchObject({ role: 'PLAYER', isReady: true, isOut: false, hand: [], cardCount: 0 });
-      expect(guestPlayer).toMatchObject({ role: 'PLAYER', isReady: false, isOut: false, hand: [], cardCount: 0 });
-      expect(spectatorPlayer).toMatchObject({ role: 'SPECTATOR', isReady: false, isOut: false, hand: [], cardCount: 0 });
+      expect(hostPlayer).toMatchObject({ role: 'PLAYER', isReady: true, isConnected: true, isOut: false, hand: [], cardCount: 0 });
+      expect(guestPlayer).toMatchObject({ role: 'PLAYER', isReady: false, isConnected: true, isOut: false, hand: [], cardCount: 0 });
+      expect(spectatorPlayer).toMatchObject({ role: 'SPECTATOR', isReady: false, isConnected: true, isOut: false, hand: [], cardCount: 0 });
       expect(updatedRoom.recentLogs.at(-1)?.payload).toMatchObject({
         message: '다음 게임 준비를 위해 로비 상태로 전환되었습니다.',
       });

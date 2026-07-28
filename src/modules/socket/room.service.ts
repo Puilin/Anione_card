@@ -34,6 +34,32 @@ export class RoomService {
     return this.userToRoom.get(userId);
   }
 
+  markDisconnected(userId: string): GameRoom | null {
+    const roomId = this.userToRoom.get(userId);
+    if (!roomId) {
+      this.logger.debug('markDisconnected skipped: User is not in any room');
+      return null;
+    }
+
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      this.logger.debug('markDisconnected skipped: Room not found');
+      return null;
+    }
+
+    const player = room.players.find((candidate) => candidate.userId === userId);
+    if (!player) {
+      this.logger.warn(
+        'markDisconnected skipped: userToRoom index exists but user not found in room players',
+      );
+      return null;
+    }
+
+    player.isConnected = false;
+    player.disconnectedAt = Date.now();
+    return room;
+  }
+
   createRoom(user: SocketData['user']): GameRoom {
     // 유저가 이미 참여 중인 방이 있는지 확인
     const alreadyInRoom = this.getUserRoom(user.userId);
@@ -51,6 +77,8 @@ export class RoomService {
       hand: [],
       cardCount: 0,
       isReady: true, // 방장은 기본 준비 상태
+      isConnected: true,
+      disconnectedAt: null,
       isOut: false,
       role: 'PLAYER',
     };
@@ -102,6 +130,8 @@ export class RoomService {
       hand: [],
       cardCount: 0,
       isReady: false,
+      isConnected: true,
+      disconnectedAt: null,
       isOut: false,
       role,
     };
@@ -131,6 +161,8 @@ export class RoomService {
         - userToRoom index exists but user not found in room players`);
       return { room: null, roomId: null, isDeleted: false };
     }
+
+    room.players[leavingIndex].isConnected = false;
 
     const isTurnOwner = room.turnOwner === userId;
     const remainingPlayers = room.players.filter(
@@ -260,6 +292,8 @@ export class RoomService {
       ...player,
       hand: [],
       cardCount: 0,
+      isConnected: true,
+      disconnectedAt: null,
       isOut: false,
       isReady:
         player.role === 'PLAYER' &&

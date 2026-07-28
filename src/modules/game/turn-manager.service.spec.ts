@@ -432,6 +432,7 @@ function createPlayer(
     hand: [],
     cardCount: 0,
     isReady: true,
+    isConnected: true,
     isOut: false,
     role: 'PLAYER',
     ...overrides,
