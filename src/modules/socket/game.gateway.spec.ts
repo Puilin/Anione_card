@@ -735,6 +735,26 @@ describe('GameGateway disconnect cleanup', () => {
       }),
     );
   });
+
+  it('disconnect timeout이 이미 삭제된 방에서도 안전하게 종료되어야 한다', () => {
+    const host = mockUser(false);
+    const guest = mockUser();
+    const room = roomService.createRoom(host);
+
+    roomService.joinRoom(room.roomId, guest);
+    gateway.handleDisconnect(createClient(guest));
+
+    roomService.leaveRoom(guest.userId);
+    roomService.leaveRoom(host.userId);
+
+    expect(() => {
+      jest.advanceTimersByTime(30_000);
+    }).not.toThrow();
+
+    expect(victoryService.determineWinner).not.toHaveBeenCalled();
+    expect(gameService.finishGame).not.toHaveBeenCalled();
+    expect(roomService.getRoom(room.roomId)).toBeUndefined();
+  });
 });
 
 function createClient(user: SocketData['user']): Socket {
