@@ -21,6 +21,7 @@ import { GameActionQueue } from '../game/actions/game-action-queue.interface';
 import { GameActionType } from 'src/shared/enums/game-action-type.enum';
 import { VictoryService } from '../game/victory.service';
 import { RoomMasterGuard } from 'src/common/guards/room-master.guard';
+import { RoomBroadcastSerializer } from './room-broadcast.serializer';
 
 describe('GameGateway', () => {
   let gateway: GameGateway;
@@ -29,6 +30,7 @@ describe('GameGateway', () => {
   let gameService: jest.Mocked<GameService>;
   let gameActionQueue: jest.Mocked<GameActionQueue>;
   let victoryService: jest.Mocked<VictoryService>;
+  let roomBroadcastSerializer: jest.Mocked<RoomBroadcastSerializer>;
 
   beforeEach(() => {
     authService = createMock<AuthService>();
@@ -36,12 +38,14 @@ describe('GameGateway', () => {
     gameService = createMock<GameService>();
     gameActionQueue = createMock<GameActionQueue>();
     victoryService = createMock<VictoryService>();
+    roomBroadcastSerializer = createMock<RoomBroadcastSerializer>();
 
     gateway = new GameGateway(
       authService,
       roomService,
       gameService,
       victoryService,
+      roomBroadcastSerializer,
       gameActionQueue,
     );
   });
@@ -497,6 +501,33 @@ describe('GameGateway', () => {
   });
 
   describe('handleGameReady', () => {
+    it('ROOM_UPDATED를 shared helper에 위임해야 한다', () => {
+      const client = {
+        data: {
+          user: {
+            userId: 'user-1',
+            nickname: 'tester',
+            isGuest: false,
+          },
+        },
+      } as Socket;
+
+      const room = {
+        roomId: 'room-1',
+        players: [],
+      } as unknown as GameRoom;
+
+      roomService.toggleReady.mockReturnValue(room);
+
+      gateway.handleGameReady(client);
+
+      expect(roomBroadcastSerializer.broadcastSharedRoomUpdated).toHaveBeenCalledWith(
+        gateway.server,
+        room,
+        'tester님이 준비 취소 상태로 변경하셨습니다.',
+      );
+    });
+
     it('FINISHED 상태에서는 gameReady 요청이 에러로 전파되어야 한다', () => {
       const client = {
         data: {
@@ -588,6 +619,7 @@ describe('GameGateway disconnect cleanup', () => {
   let turnManager: jest.Mocked<TurnManagerService>;
   let victoryService: jest.Mocked<VictoryService>;
   let gameActionQueue: jest.Mocked<GameActionQueue>;
+  let roomBroadcastSerializer: jest.Mocked<RoomBroadcastSerializer>;
 
   beforeEach(() => {
     jest.useFakeTimers();
@@ -598,12 +630,14 @@ describe('GameGateway disconnect cleanup', () => {
     victoryService = createMock<VictoryService>();
     roomService = new RoomService(turnManager);
     gameActionQueue = createMock<GameActionQueue>();
+    roomBroadcastSerializer = createMock<RoomBroadcastSerializer>();
 
     gateway = new GameGateway(
       authService,
       roomService,
       gameService,
       victoryService,
+      roomBroadcastSerializer,
       gameActionQueue,
     );
 

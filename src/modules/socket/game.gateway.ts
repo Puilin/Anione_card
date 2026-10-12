@@ -29,6 +29,7 @@ import type { GameActionQueue } from '../game/actions/game-action-queue.interfac
 import { VictoryService } from '../game/victory.service';
 import { GameStatus, VictoryTrigger } from 'src/shared/enums/game.enum';
 import { GameRoom } from 'src/shared/interfaces/game.interface';
+import { RoomBroadcastSerializer } from './room-broadcast.serializer';
 
 // 기본 ValidationPipe는 HTTP 예외를 던지므로, WebSocket에 맞게 커스텀 설정
 export const SocketValidationConfig = new ValidationPipe({
@@ -57,6 +58,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     private readonly roomService: RoomService,
     private readonly gameService: GameService,
     private readonly victoryService: VictoryService,
+    private readonly roomBroadcastSerializer: RoomBroadcastSerializer,
     @Inject(GAME_ACTION_QUEUE)
     private readonly gameActionQueue: GameActionQueue,
   ) {}
@@ -157,10 +159,11 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     const status = player?.isReady ? '준비 완료' : '준비 취소';
     this.logger.log(`[${SocketEvent.GAME_READY}] 유저 ${client.data.user.nickname}(${client.data.user.userId})가 방(${room.roomId})에서 ${status} 상태로 변경됨`);
 
-    this.server.to(room.roomId).emit(SocketEvent.ROOM_UPDATED, {
+    this.roomBroadcastSerializer.broadcastSharedRoomUpdated(
+      this.server,
       room,
-      message: `${client.data.user.nickname}님이 ${status} 상태로 변경하셨습니다.`,
-    });
+      `${client.data.user.nickname}님이 ${status} 상태로 변경하셨습니다.`,
+    );
   }
 
   // 카드 내기 (playCard)
@@ -270,6 +273,9 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
     this.logger.log(`User Connected: ${user.nickname} (${user.userId})`);
     this.logger.log(`접속 감지: ${client.id}`);
+    client.join(
+      this.roomBroadcastSerializer.getUserChannel(user.userId),
+    );
   }
 
   // 접속 해제 확인
@@ -287,10 +293,11 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     this.logger.log(`접속 해제: ${client.id}`);
 
     if (room) {
-      this.server.to(room.roomId).emit(SocketEvent.ROOM_UPDATED, {
+      this.roomBroadcastSerializer.broadcastRoomUpdated(
+        this.server,
         room,
-        message: `${user.nickname}님이 연결 해제되었습니다. ${this.DISCONNECT_GRACE_MS / 1000}초 내에 복귀하지 않으면 방에서 퇴장 처리됩니다.`,
-      });
+        `${user.nickname}님이 연결 해제되었습니다. ${this.DISCONNECT_GRACE_MS / 1000}초 내에 복귀하지 않으면 방에서 퇴장 처리됩니다.`,
+      );
     }
 
     delete client.data.room;
@@ -423,10 +430,13 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       return;
     }
 
-    this.server.to(roomId).emit(SocketEvent.ROOM_UPDATED, {
-      room,
-      message: `${player.nickname}님이 복귀하지 않아 방에서 퇴장 처리되었습니다.${isDeleted ? ' 방이 삭제되었습니다.' : ''}`,
-    });
+    if (room) {
+      this.roomBroadcastSerializer.broadcastRoomUpdated(
+        this.server,
+        room,
+        `${player.nickname}님이 복귀하지 않아 방에서 퇴장 처리되었습니다.${isDeleted ? ' 방이 삭제되었습니다.' : ''}`,
+      );
+    }
 
     if (room && victory) {
       this.server.to(roomId).emit(SocketEvent.GAME_OVER, {
