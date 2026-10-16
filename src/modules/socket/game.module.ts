@@ -21,6 +21,7 @@ import { GAME_ACTION_EXECUTOR, GAME_ACTION_QUEUE } from "../game/actions/game-ac
 import { GameActionExecutorService } from "../game/actions/game-action-executor.service";
 import { InMemoryGameActionQueue } from "../game/actions/in-memory-game-action-queue.service";
 import { VictoryService } from "../game/victory.service";
+import { RoomBroadcastSerializer } from "./room-broadcast.serializer";
 
 @Module({
   imports: [AuthModule],
@@ -31,6 +32,7 @@ import { VictoryService } from "../game/victory.service";
     GameSetupService,
     MaskingService,
     GameResponseInterceptor,
+    RoomBroadcastSerializer,
     ActionValidatorRegistry,
     AttackCardValidator,
     NormalCardValidator,
